@@ -3,32 +3,43 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from '../src/api/client';
-import type { ScheduledTask } from '../src/api/types';
+import type { ScheduledTask, ScheduleStep } from '../src/api/types';
 import { SchedulesPanel } from '../src/components/schedules-panel';
 
 function task(overrides: Partial<ScheduledTask> = {}): ScheduledTask {
   return { id: 'task-1', server_id: 'one', name: 'Nightly restart', action: 'restart', command: '', backup_target: '', cron: 'midnight', timezone: 'Asia/Bangkok', enabled: true, next_run_at: '2026-10-28T17:00:00Z', last_run_at: '', last_status: '', last_error: '', created_at: '', updated_at: '', ...overrides };
 }
 
+const backupSteps: ScheduleStep[] = [
+  { action: 'command', command: 'broadcast "Backup Starting"' },
+  { action: 'command', command: 'save-all' },
+  { action: 'backup', backup_target: 's3' },
+  { action: 'delay', delay_seconds: 45 },
+  { action: 'command', command: 'broadcast "Backup Complete"' },
+];
+
 afterEach(() => vi.restoreAllMocks());
 
 describe('SchedulesPanel', () => {
-  it('creates an ordered backup chain, then edits, reorders, and removes steps', async () => {
+  it('creates an ordered backup chain', async () => {
     vi.spyOn(api, 'listSchedules').mockResolvedValue({ schedules: [], default_timezone: 'Asia/Bangkok' });
     const create = vi.spyOn(api, 'createSchedule').mockImplementation(async (_id, input) => task(input));
-    const update = vi.spyOn(api, 'updateSchedule').mockImplementation(async (_id, _taskId, input) => task(input));
     const user = userEvent.setup();
     render(<SchedulesPanel serverId="one" />);
     await user.click(await screen.findByRole('button', { name: 'Add schedule' }));
-    await user.type(screen.getByLabelText('Task name'), 'Announced backup');
-    await user.type(screen.getByLabelText('Console command'), 'broadcast "Backup Starting"');
+    // Paste complete text values to avoid rerendering every select per character.
+    await user.click(screen.getByLabelText('Task name'));
+    await user.paste('Announced backup');
+    await user.click(screen.getByLabelText('Console command'));
+    await user.paste('broadcast "Backup Starting"');
     await user.click(screen.getByLabelText('Action'));
     await user.click(screen.getByRole('option', { name: 'Action chain' }));
     expect(screen.getByLabelText('Command for step 1')).toHaveValue('broadcast "Backup Starting"');
     expect(screen.getByRole('button', { name: 'Move step 1 up' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Remove step 1' })).toBeDisabled();
     await user.click(screen.getByRole('button', { name: 'Add step' }));
-    await user.type(screen.getByLabelText('Command for step 2'), 'save-all');
+    await user.click(screen.getByLabelText('Command for step 2'));
+    await user.paste('save-all');
     await user.click(screen.getByRole('button', { name: 'Add step' }));
     await user.click(screen.getByLabelText('Action for step 3'));
     await user.click(screen.getByRole('option', { name: 'Create backup' }));
@@ -40,19 +51,21 @@ describe('SchedulesPanel', () => {
     await user.clear(screen.getByLabelText('Wait for step 4 (seconds)'));
     await user.type(screen.getByLabelText('Wait for step 4 (seconds)'), '45');
     await user.click(screen.getByRole('button', { name: 'Add step' }));
-    await user.type(screen.getByLabelText('Command for step 5'), 'broadcast "Backup Complete"');
+    await user.click(screen.getByLabelText('Command for step 5'));
+    await user.paste('broadcast "Backup Complete"');
     await user.click(screen.getByRole('button', { name: 'Create schedule' }));
-    const steps = [
-      { action: 'command', command: 'broadcast "Backup Starting"' },
-      { action: 'command', command: 'save-all' },
-      { action: 'backup', backup_target: 's3' },
-      { action: 'delay', delay_seconds: 45 },
-      { action: 'command', command: 'broadcast "Backup Complete"' },
-    ];
-    await waitFor(() => expect(create).toHaveBeenCalledWith('one', { name: 'Announced backup', action: 'chain', command: '', backup_target: '', steps, cron: 'midnight', timezone: 'Asia/Bangkok', enabled: true }));
+    await waitFor(() => expect(create).toHaveBeenCalledWith('one', { name: 'Announced backup', action: 'chain', command: '', backup_target: '', steps: backupSteps, cron: 'midnight', timezone: 'Asia/Bangkok', enabled: true }));
     const list = await screen.findByRole('list', { name: 'Steps for Announced backup' });
     expect(within(list).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['broadcast "Backup Starting"', 'save-all', 'Create backup · Remote (S3)', 'Wait 45 seconds', 'broadcast "Backup Complete"']);
-    await user.click(screen.getByRole('button', { name: 'Edit Announced backup' }));
+  });
+
+  it('edits, reorders, and removes steps from an existing backup chain', async () => {
+    const original = task({ name: 'Announced backup', action: 'chain', steps: backupSteps });
+    vi.spyOn(api, 'listSchedules').mockResolvedValue({ schedules: [original], default_timezone: 'Asia/Bangkok' });
+    const update = vi.spyOn(api, 'updateSchedule').mockImplementation(async (_id, _taskId, input) => task(input));
+    const user = userEvent.setup();
+    render(<SchedulesPanel serverId="one" />);
+    await user.click(await screen.findByRole('button', { name: 'Edit Announced backup' }));
     expect(screen.getByLabelText('Backup target for step 3')).toHaveTextContent('Remote (S3)');
     expect(screen.getByLabelText('Wait for step 4 (seconds)')).toHaveValue(45);
     await user.click(screen.getByRole('button', { name: 'Move step 3 up' }));
@@ -62,7 +75,7 @@ describe('SchedulesPanel', () => {
     expect(screen.getByLabelText('Backup target for step 3')).toHaveTextContent('Remote (S3)');
     await user.click(screen.getByRole('button', { name: 'Remove step 2' }));
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
-    await waitFor(() => expect(update).toHaveBeenCalledWith('one', 'task-1', expect.objectContaining({ steps: [steps[0], steps[2], steps[3], steps[4]] })));
+    await waitFor(() => expect(update).toHaveBeenCalledWith('one', 'task-1', expect.objectContaining({ steps: [backupSteps[0], backupSteps[2], backupSteps[3], backupSteps[4]] })));
   });
 
   it('retains a chain after a save failure and clears steps when switching to a single action', async () => {
