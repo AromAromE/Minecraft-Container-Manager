@@ -62,7 +62,7 @@ describe('Mod Update Tool & Jar Picker', () => {
       expect(fetchMock.mock.calls[0][0]).toBe(`/api/servers/${mockServer.id}/mods/updates?cached=true`);
     });
 
-    it('forwards the provider credential and surfaces a server planning failure', async () => {
+    it('does not forward legacy credentials and surfaces a server planning failure', async () => {
       localStorage.setItem('mcm_curseforge_api_key', ' provider-key ');
       const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
         error: { code: 'upstream_error', message: 'Provider unavailable' },
@@ -71,7 +71,7 @@ describe('Mod Update Tool & Jar Picker', () => {
       try {
         await expect(api.checkModUpdates(mockServer.id, true)).rejects.toThrow('Provider unavailable');
         expect(fetchMock.mock.calls[0][0]).toBe(`/api/servers/${mockServer.id}/mods/updates?force=true`);
-        expect(new Headers(fetchMock.mock.calls[0][1].headers).get('x-curseforge-api-key')).toBe('provider-key');
+        expect(new Headers(fetchMock.mock.calls[0][1].headers).has('x-curseforge-api-key')).toBe(false);
       } finally {
         localStorage.removeItem('mcm_curseforge_api_key');
       }

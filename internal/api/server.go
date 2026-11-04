@@ -232,6 +232,10 @@ func (s *Server) routes() {
 	// External catalog proxy.
 	s.mux.HandleFunc("GET /api/proxy", s.requirePermission("servers.view", s.handleProxy))
 	s.mux.HandleFunc("POST /api/proxy", s.requirePermission("servers.view", s.handleProxy))
+	s.mux.HandleFunc("GET /api/curseforge/settings", s.requireAnyPermission(s.wrapJSON(s.handleGetCurseForgeSettings), "servers.view", "servers.create", "settings.manage"))
+	s.mux.HandleFunc("PUT /api/curseforge/settings", s.requirePermission("settings.manage", s.wrapJSON(s.handlePutCurseForgeSettings)))
+	s.mux.HandleFunc("GET /api/curseforge/{path...}", s.requireAnyPermission(s.handleCurseForge, "servers.view", "servers.create"))
+	s.mux.HandleFunc("POST /api/curseforge/{path...}", s.requireAnyPermission(s.handleCurseForge, "servers.view", "servers.create"))
 
 	// Saved server logs, including compressed logs and tar archive members.
 	s.mux.HandleFunc("GET /api/servers/{id}/logs", s.requirePermission("logs.read", s.wrapJSON(s.handleListLogs)))

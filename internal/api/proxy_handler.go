@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/mcm-panel/mcm/internal/proxy"
@@ -17,7 +18,15 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request", "Missing 'url' query parameter")
 		return
 	}
+	if target, err := url.Parse(targetURL); err == nil && strings.EqualFold(target.Hostname(), "api.curseforge.com") {
+		writeError(w, http.StatusBadRequest, "invalid_request", "use the server-side CurseForge catalog endpoint")
+		return
+	}
+	// Browser-supplied credentials must never be forwarded to catalog providers.
+	s.proxyCatalog(w, r, targetURL, nil)
+}
 
+func (s *Server) proxyCatalog(w http.ResponseWriter, r *http.Request, targetURL string, headers http.Header) {
 	skipCache := r.URL.Query().Get("skip_cache") == "true" || r.Header.Get("Cache-Control") == "no-cache"
 
 	var body []byte
@@ -30,7 +39,7 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	resp, err := s.proxy.Do(r.Context(), r.Method, targetURL, body, r.Header, skipCache)
+	resp, err := s.proxy.Do(r.Context(), r.Method, targetURL, body, headers, skipCache)
 	if err != nil {
 		if errors.Is(err, proxy.ErrForbiddenHost) {
 			writeError(w, http.StatusForbidden, "forbidden_host", err.Error())

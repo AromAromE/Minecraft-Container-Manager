@@ -1,6 +1,6 @@
 import { usePermissions } from '../lib/auth';
 import { createFileRoute, redirect } from '@tanstack/react-router';
-import { Bell, Globe, Network, RefreshCw } from 'lucide-react';
+import { Bell, Flame, Globe, Network, RefreshCw } from 'lucide-react';
 import { AppShell } from '../components/app-shell';
 import { RequireAuth } from '../components/require-auth';
 import { SettingsTabs } from '../components/settings-tabs';
@@ -9,12 +9,14 @@ import { PortPoolSettingsCard } from '../components/port-pool-settings';
 import { DiscordNotificationSettings } from '../components/discord-notification-settings';
 import { UpdateCheckerSettings } from '../components/update-checker-settings';
 import { PanelUpdateSettings } from '../components/panel-update-settings';
+import { CurseForgeSettings } from '../components/curseforge-settings';
 
 const tabs = [
   { id: 'updates', label: 'Updates', icon: RefreshCw },
   { id: 'dns', label: 'DNS Providers', icon: Globe },
   { id: 'ports', label: 'Port Pool', icon: Network },
   { id: 'notifications', label: 'Notifications', icon: Bell },
+  { id: 'curseforge', label: 'CurseForge', icon: Flame },
 ] as const;
 
 type AppSettingsTab = typeof tabs[number]['id'];
@@ -63,6 +65,8 @@ function AppSettingsRoute() {
             <div className="max-w-3xl space-y-6">{can('panel.update') && <PanelUpdateSettings />}{can('updates.manage') && <UpdateCheckerSettings />}</div>
           ) : activeTab === 'notifications' ? (
             <div className="max-w-3xl"><DiscordNotificationSettings /></div>
+          ) : activeTab === 'curseforge' ? (
+            <div className="max-w-3xl"><CurseForgeSettings /></div>
           ) : (
             <div className="max-w-3xl"><PortPoolSettingsCard /></div>
           )}

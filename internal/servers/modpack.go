@@ -20,7 +20,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mcm-panel/mcm/internal/curseforge"
 	"github.com/mcm-panel/mcm/internal/jars"
+	"github.com/mcm-panel/mcm/internal/proxy"
 	"github.com/mcm-panel/mcm/internal/storage"
 )
 
@@ -87,7 +89,6 @@ type InstallModpackOpts struct {
 	ProjectSlug         string `json:"project_slug,omitempty"`
 	VersionID           string `json:"version_id,omitempty"`
 	AutoConfigureServer bool   `json:"auto_configure_server"`
-	CurseForgeAPIKey    string `json:"curseforge_api_key,omitempty"`
 	CreatedWithModpack  bool   `json:"created_with_modpack,omitempty"`
 }
 
@@ -857,6 +858,10 @@ func (s *Store) InstallModpack(ctx context.Context, serverID string, archivePath
 		}
 
 	case ModpackFormatCurseForge:
+		cfKey, keyErr := curseforge.APIKey(ctx, s.db)
+		if keyErr != nil {
+			return nil, fmt.Errorf("read CurseForge settings: %w", keyErr)
+		}
 		// Extract CurseForge manifest
 		var man curseForgeManifest
 		for _, zf := range zr.File {
@@ -1017,7 +1022,7 @@ func (s *Store) InstallModpack(ctx context.Context, serverID string, archivePath
 			go func() {
 				defer wg.Done()
 				for item := range cfCh {
-					dlURL, fileName, hashes, err := resolveCurseForgeDownload(ctx, client, item.ProjectID, item.FileID, opts.CurseForgeAPIKey)
+					dlURL, fileName, hashes, err := resolveCurseForgeDownload(ctx, s.getProxy(), item.ProjectID, item.FileID, cfKey)
 					if err != nil || dlURL == "" {
 						if item.Required {
 							failCF(fmt.Errorf("required CurseForge file %d unavailable: %v", item.FileID, err))
@@ -1422,24 +1427,14 @@ func downloadToFile(ctx context.Context, client *http.Client, rawURL, destPath s
 }
 
 // resolveCurseForgeDownload resolves download URL and filename for a CurseForge file.
-func resolveCurseForgeDownload(ctx context.Context, client *http.Client, projectID, fileID int, apiKey string) (string, string, map[string]string, error) {
-	if apiKey == "" {
-		apiKey = os.Getenv("CURSEFORGE_API_KEY")
-	}
+func resolveCurseForgeDownload(ctx context.Context, px *proxy.Service, projectID, fileID int, apiKey string) (string, string, map[string]string, error) {
 	target := fmt.Sprintf("https://api.curseforge.com/v1/mods/%d/files/%d", projectID, fileID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	headers := make(http.Header)
+	headers.Set("x-api-key", apiKey)
+	resp, err := px.Do(ctx, http.MethodGet, target, nil, headers, false)
 	if err != nil {
 		return "", "", nil, err
 	}
-	if apiKey != "" {
-		req.Header.Set("x-api-key", apiKey)
-	}
-	req.Header.Set("Accept", "application/json")
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", "", nil, err
-	}
-	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return "", "", nil, fmt.Errorf("CurseForge file metadata returned HTTP %d", resp.StatusCode)
 	}
@@ -1450,7 +1445,7 @@ func resolveCurseForgeDownload(ctx context.Context, client *http.Client, project
 			Hashes      []curseForgeHash `json:"hashes"`
 		} `json:"data"`
 	}
-	if err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&result); err != nil {
+	if err = json.Unmarshal(resp.Body, &result); err != nil {
 		return "", "", nil, err
 	}
 	file := result.Data
@@ -1461,35 +1456,28 @@ func resolveCurseForgeDownload(ctx context.Context, client *http.Client, project
 	if file.DownloadURL != "" {
 		return file.DownloadURL, file.FileName, hashes, nil
 	}
-	download, err := resolveCurseForgeDownloadURLEndpoint(ctx, client, projectID, fileID, apiKey)
+	download, err := resolveCurseForgeDownloadURLEndpoint(ctx, px, projectID, fileID, apiKey)
 	if err != nil || download == "" {
 		return "", "", nil, fmt.Errorf("CurseForge file %d requires manual download: %v", fileID, err)
 	}
 	return download, file.FileName, hashes, nil
 }
 
-func resolveCurseForgeDownloadURLEndpoint(ctx context.Context, client *http.Client, projectID, fileID int, apiKey string) (string, error) {
+func resolveCurseForgeDownloadURLEndpoint(ctx context.Context, px *proxy.Service, projectID, fileID int, apiKey string) (string, error) {
 	url := fmt.Sprintf("https://api.curseforge.com/v1/mods/%d/files/%d/download-url", projectID, fileID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	headers := make(http.Header)
+	headers.Set("x-api-key", apiKey)
+	resp, err := px.Do(ctx, http.MethodGet, url, nil, headers, false)
 	if err != nil {
 		return "", err
 	}
-	if apiKey != "" {
-		req.Header.Set("x-api-key", apiKey)
-	}
-	req.Header.Set("Accept", "application/json")
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("status %d", resp.StatusCode)
 	}
 	var res struct {
 		Data string `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+	if err := json.Unmarshal(resp.Body, &res); err != nil {
 		return "", err
 	}
 	return res.Data, nil

@@ -1,4 +1,5 @@
 import { rememberArtifactHashes } from './artifact-hashes';
+import { request } from './client';
 import { clearRateLimitCache } from './rate-limited-fetch';
 import type {
   CurseForgeFile,
@@ -10,28 +11,30 @@ import type {
 import { extractModId } from './modrinth';
 import { rateLimitedFetchJson } from './rate-limited-fetch';
 
-export const CURSEFORGE_API_BASE = 'https://api.curseforge.com/v1';
+export const CURSEFORGE_API_BASE = '/api/curseforge';
 export const MINECRAFT_GAME_ID = 432;
 
-export const CF_STORAGE_KEY = 'mcm_curseforge_api_key';
-
-export function getCurseForgeApiKey(): string {
-  if (typeof window === 'undefined') return '';
-  return localStorage.getItem(CF_STORAGE_KEY) || '';
+export interface CurseForgeSettings {
+  configured: boolean;
+  source: 'database' | 'environment' | '';
 }
 
-export function setCurseForgeApiKey(key: string): void {
-  if (typeof window === 'undefined') return;
-  if (!key.trim()) {
-    localStorage.removeItem(CF_STORAGE_KEY);
-  } else {
-    localStorage.setItem(CF_STORAGE_KEY, key.trim());
-  }
+export function getCurseForgeSettings(): Promise<CurseForgeSettings> {
+  return request<CurseForgeSettings>(`${CURSEFORGE_API_BASE}/settings`);
+}
+
+export async function saveCurseForgeApiKey(key: string): Promise<CurseForgeSettings> {
+  const settings = await request<CurseForgeSettings>(`${CURSEFORGE_API_BASE}/settings`, {
+    method: 'PUT',
+    body: JSON.stringify({ api_key: key.trim() }),
+  });
   clearRateLimitCache();
-}
-
-export function hasCurseForgeApiKey(): boolean {
-  return Boolean(getCurseForgeApiKey());
+  // Remove the old browser-only credential after explicitly saving the shared replacement.
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('mcm_curseforge_api_key');
+    window.dispatchEvent(new Event('mcm:curseforge-settings'));
+  }
+  return settings;
 }
 
 /**
@@ -109,7 +112,6 @@ export interface CurseForgeSearchParams {
  */
 export async function searchCurseForge(
   params: CurseForgeSearchParams,
-  apiKey: string,
   signal?: AbortSignal,
 ): Promise<CurseForgeSearchResult> {
   const {
@@ -145,7 +147,6 @@ export async function searchCurseForge(
     {
       headers: {
         Accept: 'application/json',
-        'x-api-key': apiKey.trim(),
       },
     },
     {
@@ -160,7 +161,6 @@ export async function searchCurseForge(
  */
 export async function getCurseForgeFiles(
   modId: number,
-  apiKey: string,
   options?: {
     gameVersion?: string;
     modLoaderType?: number;
@@ -185,7 +185,6 @@ export async function getCurseForgeFiles(
     {
       headers: {
         Accept: 'application/json',
-        'x-api-key': apiKey.trim(),
       },
     },
     {
@@ -205,7 +204,6 @@ export async function getCurseForgeFiles(
 export async function getCurseForgeDownloadUrl(
   modId: number,
   fileId: number,
-  apiKey: string,
   signal?: AbortSignal,
 ): Promise<string> {
   const url = `${CURSEFORGE_API_BASE}/mods/${modId}/files/${fileId}/download-url`;
@@ -214,7 +212,6 @@ export async function getCurseForgeDownloadUrl(
     {
       headers: {
         Accept: 'application/json',
-        'x-api-key': apiKey.trim(),
       },
     },
     {
@@ -303,10 +300,9 @@ export function isCurseForgeModInstalled(
  */
 export async function getCurseForgeMods(
   modIds: number[],
-  apiKey: string,
   signal?: AbortSignal,
 ): Promise<CurseForgeMod[]> {
-  if (modIds.length === 0 || !apiKey.trim()) return [];
+  if (modIds.length === 0) return [];
   const url = `${CURSEFORGE_API_BASE}/mods`;
   try {
     const res = await rateLimitedFetchJson<{ data: CurseForgeMod[] }>(
@@ -316,7 +312,6 @@ export async function getCurseForgeMods(
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/json',
-          'x-api-key': apiKey.trim(),
         },
         body: JSON.stringify({ modIds }),
       },
@@ -330,4 +325,3 @@ export async function getCurseForgeMods(
     return [];
   }
 }
-

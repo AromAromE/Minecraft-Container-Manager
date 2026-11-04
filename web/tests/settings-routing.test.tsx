@@ -72,6 +72,7 @@ describe('App and user settings', () => {
   it.each([
     ['updates', 'Updates'], ['dns', 'DNS Providers'],
     ['ports', 'Port Pool'], ['notifications', 'Notifications'],
+    ['curseforge', 'CurseForge'],
   ])('preserves the shared %s settings bookmark', async (tab, name) => {
     const router = renderSettings(`/settings?tab=${tab}`);
     expect(await screen.findByRole('heading', { name: 'App Settings' })).toBeVisible();
@@ -120,9 +121,9 @@ describe('App and user settings', () => {
     const updates = await screen.findByRole('tab', { name: 'Updates' });
     updates.focus();
     await user.keyboard('{End}');
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'Notifications' })).toHaveAttribute('aria-selected', 'true'));
-    expect(screen.getByRole('tab', { name: 'Notifications' })).toHaveFocus();
-    expect(router.state.location.search.tab).toBe('notifications');
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'CurseForge' })).toHaveAttribute('aria-selected', 'true'));
+    expect(screen.getByRole('tab', { name: 'CurseForge' })).toHaveFocus();
+    expect(router.state.location.search.tab).toBe('curseforge');
     await user.keyboard('{ArrowRight}');
     await waitFor(() => expect(updates).toHaveAttribute('aria-selected', 'true'));
     expect(updates).toHaveFocus();

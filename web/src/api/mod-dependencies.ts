@@ -272,7 +272,6 @@ export async function resolveModrinthDependencies(
 export interface ResolveCurseForgeDependenciesOptions {
   file: CurseForgeFile;
   primaryMod?: { id?: number; slug?: string; name: string };
-  apiKey: string;
   gameVersion?: string;
   modLoaderType?: number;
   installedMods: Mod[];
@@ -289,7 +288,6 @@ export async function resolveCurseForgeDependencies(
   const {
     file,
     primaryMod,
-    apiKey,
     gameVersion,
     modLoaderType,
     installedMods,
@@ -297,7 +295,7 @@ export async function resolveCurseForgeDependencies(
     signal,
   } = options;
 
-  if (!file.dependencies || file.dependencies.length === 0 || !apiKey.trim()) {
+  if (!file.dependencies || file.dependencies.length === 0) {
     return {
       primaryTitle: primaryMod?.name || file.displayName,
       dependencies: [],
@@ -321,7 +319,7 @@ export async function resolveCurseForgeDependencies(
   }
 
   const modIds = validDeps.map((d) => d.modId);
-  const fetchedMods = await getCurseForgeMods(modIds, apiKey, signal);
+  const fetchedMods = await getCurseForgeMods(modIds, signal);
   const modMap = new Map<number, CurseForgeMod>();
   for (const m of fetchedMods) {
     modMap.set(m.id, m);
@@ -364,7 +362,7 @@ export async function resolveCurseForgeDependencies(
     // Fetch compatible file
     let targetFile: CurseForgeFile | undefined;
     try {
-      const fls = await getCurseForgeFiles(cfMod.id, apiKey, {
+      const fls = await getCurseForgeFiles(cfMod.id, {
         gameVersion,
         modLoaderType,
       }, signal);
@@ -376,7 +374,7 @@ export async function resolveCurseForgeDependencies(
     let downloadUrl = targetFile?.downloadUrl ?? undefined;
     if (!downloadUrl && targetFile) {
       try {
-        downloadUrl = await getCurseForgeDownloadUrl(cfMod.id, targetFile.id, apiKey, signal);
+        downloadUrl = await getCurseForgeDownloadUrl(cfMod.id, targetFile.id, signal);
       } catch {
         // ignore
       }

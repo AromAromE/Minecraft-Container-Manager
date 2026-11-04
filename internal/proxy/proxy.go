@@ -105,6 +105,8 @@ func NewService() *Service {
 	return &Service{
 		client: &http.Client{
 			Timeout: 30 * time.Second,
+			// Catalog requests carry shared credentials; never forward them on redirects.
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
 		},
 		domains:  make(map[string]*domainState),
 		cache:    make(map[string]*cacheEntry),

@@ -144,21 +144,8 @@ func (s *Server) handleDeleteMod(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-func contextWithCurseForgeKey(r *http.Request) *http.Request {
-	cfKey := r.Header.Get("x-curseforge-api-key")
-	if cfKey == "" {
-		cfKey = r.Header.Get("x-api-key")
-	}
-	if cfKey != "" {
-		ctx := servers.WithCurseForgeAPIKey(r.Context(), cfKey)
-		return r.WithContext(ctx)
-	}
-	return r
-}
-
 // handleGetModUpdates retrieves current updates for a server's mods/plugins.
 func (s *Server) handleGetModUpdates(w http.ResponseWriter, r *http.Request) {
-	r = contextWithCurseForgeKey(r)
 	force := r.URL.Query().Get("force") == "true" || r.URL.Query().Get("force") == "1"
 	if r.URL.Query().Get("cached") == "true" && !force {
 		res, err := s.servers.CachedModUpdates(r.Context(), r.PathValue("id"))
@@ -179,7 +166,6 @@ func (s *Server) handleGetModUpdates(w http.ResponseWriter, r *http.Request) {
 
 // handleCheckModUpdates forces an update check across online catalogs.
 func (s *Server) handleCheckModUpdates(w http.ResponseWriter, r *http.Request) {
-	r = contextWithCurseForgeKey(r)
 	res, err := s.servers.CheckModUpdates(r.Context(), r.PathValue("id"), true)
 	if err != nil {
 		s.writeServerErr(w, err)
@@ -190,7 +176,6 @@ func (s *Server) handleCheckModUpdates(w http.ResponseWriter, r *http.Request) {
 
 // handleCheckVersionUpgrade checks mod/plugin compatibility against a target Minecraft version.
 func (s *Server) handleCheckVersionUpgrade(w http.ResponseWriter, r *http.Request) {
-	r = contextWithCurseForgeKey(r)
 	targetVersion := r.URL.Query().Get("target_version")
 	force := r.URL.Query().Get("force") == "true" || r.URL.Query().Get("force") == "1"
 	report, err := s.servers.CheckTargetVersionCompatibility(r.Context(), r.PathValue("id"), targetVersion, force)
@@ -241,7 +226,6 @@ func (s *Server) handleBatchUpdateMods(w http.ResponseWriter, r *http.Request) {
 
 // handleGetModVersions returns available releases/jars for a specific mod.
 func (s *Server) handleGetModVersions(w http.ResponseWriter, r *http.Request) {
-	r = contextWithCurseForgeKey(r)
 	jars, err := s.servers.GetModAvailableJars(r.Context(), r.PathValue("id"), r.PathValue("name"))
 	if err != nil {
 		s.writeModErr(w, err)

@@ -198,7 +198,7 @@ a container.
 
 ### App and user settings
 
-**App Settings** in the main navigation contains shared installation controls: updates, DNS providers, port allocation, and Discord notifications. Changes apply to all panel users.
+**App Settings** in the main navigation contains shared installation controls: updates, DNS providers, port allocation, Discord notifications, and the CurseForge API key. Changes apply to all panel users.
 
 Open **User Settings** from your profile in the sidebar or the avatar on mobile to manage your email, password, two-factor authentication, and passkeys. **Appearance** contains the theme preference, which is saved in the current browser and also available from the header theme menu.
 
@@ -212,7 +212,7 @@ Saved results survive panel restarts. Servers with available updates display an 
 
 Each fleet scan starts with a fresh shared response cache. Repeated provider requests, including failures, are reused throughout that scan. Modrinth hash results are reused even when servers have overlapping but different mod lists; game version and loader filters stay separate. Software catalog responses are shared too. Failed checks retain previously known updates and show a warning.
 
-Software checks compare published stable versions and builds for the installed version when a build is pinned. Platforms without a supported live catalog (including custom jars) show an explanation. Unrecognized plugin/mod jars may not be identifiable. Nightly CurseForge checks require `CURSEFORGE_API_KEY` on the panel; a browser-only key is available only for manual checks. The panel must be running at midnight; missed scans are not replayed on startup.
+Software checks compare published stable versions and builds for the installed version when a build is pinned. Platforms without a supported live catalog (including custom jars) show an explanation. Unrecognized plugin/mod jars may not be identifiable. Configure the shared CurseForge key in **App Settings → CurseForge** (requires `settings.manage`), or set `CURSEFORGE_API_KEY` on the panel as a fallback. Browsing, installs, manual checks, and nightly scans all use this server-side key; it is never returned to browsers. Previously browser-only keys must be entered once in the shared settings. Removing the saved key restores the environment fallback. The panel must be running at midnight; missed scans are not replayed on startup.
 
 Authenticated endpoints: `GET /api/updates` reads saved status and results, `PUT /api/updates/settings` saves `{ "enabled": true }`, and `POST /api/updates/check` starts a scan and returns `202`. Manual and scheduled fleet scans cannot overlap. `GET /api/servers/:id/mods/updates?cached=true` reads saved/in-memory results without contacting catalogs. Mutating endpoints use existing CSRF protection.
 
@@ -826,6 +826,10 @@ Choose the provider under **App Settings → DNS Providers** and use **Test Conn
 | `GET` | `/api/ports/available` | Check available host ports in allocation range. |
 | `GET` | `/api/settings` | Fetch global panel settings (DNS, port range). |
 | `PUT` | `/api/settings` | Update global panel settings. |
+| `GET` | `/api/curseforge/settings` | Read shared CurseForge availability and credential source, never the key. |
+| `PUT` | `/api/curseforge/settings` | Save `{ "api_key": "..." }`; an empty string removes the saved key. Requires `settings.manage` and CSRF protection. |
+| `GET` | `/api/curseforge/mods/...` | Search and read CurseForge files/download URLs using the shared server-side key, caching, and rate limits. |
+| `POST` | `/api/curseforge/mods` | Batch CurseForge project lookups using the shared key. Requires CSRF protection. |
 | `GET` | `/api/runtime/status` | Get selected engine (`runtime`), API reachability, and runtime image status. |
 | `GET` | `/api/docker/status` | Compatibility alias for `/api/runtime/status`. |
 | `GET` | `/api/proxy` | Cached and rate-limited reverse proxy for catalog APIs. |

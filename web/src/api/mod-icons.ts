@@ -1,4 +1,4 @@
-import { getCurseForgeApiKey, getCurseForgeMods } from './curseforge';
+import { getCurseForgeMods } from './curseforge';
 import { getHangarProject } from './hangar';
 import { getProjects } from './modrinth';
 import { getSpigetIconUrl, getSpigetResource } from './spiget';
@@ -34,10 +34,9 @@ export async function fetchInstalledModIcons(mods: Mod[]): Promise<Record<string
   const curseforgeMods = mods.filter(
     (mod) => mod.provider === 'curseforge' && /^[1-9]\d*$/.test(mod.project_id ?? ''),
   );
-  const apiKey = getCurseForgeApiKey();
-  if (curseforgeMods.length > 0 && apiKey.trim()) {
+  if (curseforgeMods.length > 0) {
     const ids = [...new Set(curseforgeMods.map((mod) => Number(mod.project_id)))];
-    requests.push(getCurseForgeMods(ids, apiKey).then((projects) => {
+    requests.push(getCurseForgeMods(ids).then((projects) => {
       for (const mod of curseforgeMods) {
         const project = projects.find((project) => project.id === Number(mod.project_id));
         const icon = project?.logo?.thumbnailUrl || project?.logo?.url;

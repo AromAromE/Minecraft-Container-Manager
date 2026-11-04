@@ -2,14 +2,15 @@ import { catalogTarget } from './catalog-fixtures';
 import { clearRateLimitCache } from '../src/api/rate-limited-fetch';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  getCurseForgeApiKey,
+  getCurseForgeSettings,
   getCurseForgeClassId,
   getCurseForgeDownloadUrl,
   getCurseForgeLoaderType,
-  hasCurseForgeApiKey,
   isCurseForgeModInstalled,
   searchCurseForge,
-  setCurseForgeApiKey,
+  saveCurseForgeApiKey,
+  getCurseForgeFiles,
+  getCurseForgeMods,
 } from '../src/api/curseforge';
 import type { CurseForgeMod, Mod } from '../src/api/types';
 
@@ -28,17 +29,18 @@ describe('CurseForge API client', () => {
     localStorage.clear();
   });
 
-  it('manages CurseForge API key in localStorage', () => {
-    expect(hasCurseForgeApiKey()).toBe(false);
-    expect(getCurseForgeApiKey()).toBe('');
+  it('saves the shared credential only to the server and reads redacted status', async () => {
+    const status = { configured: true, source: 'database' };
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify(status)));
+    global.fetch = fetchMock;
+    localStorage.setItem('mcm_curseforge_api_key', 'legacy-key');
 
-    setCurseForgeApiKey('test-key-12345');
-    expect(hasCurseForgeApiKey()).toBe(true);
-    expect(getCurseForgeApiKey()).toBe('test-key-12345');
-
-    setCurseForgeApiKey('');
-    expect(hasCurseForgeApiKey()).toBe(false);
-    expect(getCurseForgeApiKey()).toBe('');
+    await expect(saveCurseForgeApiKey(' test-key-12345 ')).resolves.toEqual(status);
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/curseforge/settings');
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ api_key: 'test-key-12345' }) });
+    expect(localStorage.getItem('mcm_curseforge_api_key')).toBeNull();
+    await expect(getCurseForgeSettings()).resolves.toEqual(status);
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/curseforge/settings');
   });
 
   it('maps server types to loaders and classes correctly', () => {
@@ -53,7 +55,7 @@ describe('CurseForge API client', () => {
     expect(getCurseForgeClassId('forge')).toBe(6);
   });
 
-  it('searchCurseForge passes x-api-key header and query options', async () => {
+  it('searches through the authenticated server endpoint without a browser credential', async () => {
     const mockCFResult = {
       data: [
         {
@@ -88,12 +90,11 @@ describe('CurseForge API client', () => {
         pageSize: 20,
         index: 0,
       },
-      'my-cf-token',
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const rawUrl=String(fetchMock.mock.calls[0][0]);
- expect(rawUrl).toMatch(/^\/api\/proxy\?url=/);
+ expect(rawUrl).toMatch(/^\/api\/curseforge\/mods\/search\?/);
  const calledUrl = catalogTarget(rawUrl);
     const calledInit = fetchMock.mock.calls[0][1] as RequestInit;
 
@@ -102,7 +103,8 @@ describe('CurseForge API client', () => {
     expect(calledUrl).toContain('modLoaderType=4');
     expect(calledUrl).toContain('gameVersion=1.20.4');
 
-    expect(new Headers(calledInit.headers).get('x-api-key')).toBe('my-cf-token');
+    expect(new Headers(calledInit.headers).has('x-api-key')).toBe(false);
+    expect(calledInit.credentials).toBe('include');
     expect(res.data[0].name).toBe('JEI - Just Enough Items');
   });
 
@@ -112,8 +114,30 @@ describe('CurseForge API client', () => {
       json: async () => ({ data: 'https://edge.forgecdn.net/files/123/456/jei.jar' }),
     });
 
-    const url = await getCurseForgeDownloadUrl(306612, 123456, 'my-key');
+    const url = await getCurseForgeDownloadUrl(306612, 123456);
     expect(url).toBe('https://edge.forgecdn.net/files/123/456/jei.jar');
+  });
+
+  it('uses server-side files and batch lookups even when a legacy browser key exists', async () => {
+    localStorage.setItem('mcm_curseforge_api_key', 'do-not-forward');
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ data: [] })));
+    global.fetch = fetchMock;
+    await getCurseForgeFiles(123, { gameVersion: '1.21.1' });
+    await getCurseForgeMods([123]);
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      '/api/curseforge/mods/123/files?gameVersion=1.21.1&pageSize=25',
+      '/api/curseforge/mods',
+    ]);
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(new Headers(init.headers).has('x-api-key')).toBe(false);
+      expect(new Headers(init.headers).has('x-curseforge-api-key')).toBe(false);
+      expect(JSON.stringify(init)).not.toContain('do-not-forward');
+    }
+  });
+
+  it('reports missing server configuration', async () => {
+    global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { message: 'Configure a shared key' } }), { status: 503 }));
+    await expect(searchCurseForge({})).rejects.toThrow('Configure a shared key');
   });
 
   it('isCurseForgeModInstalled detects installed mod matching slug', () => {

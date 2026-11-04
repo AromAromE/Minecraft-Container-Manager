@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/mcm-panel/mcm/internal/curseforge"
 	"github.com/mcm-panel/mcm/internal/notifications"
 	"github.com/mcm-panel/mcm/internal/servers"
 )
@@ -23,7 +24,7 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "internal", "could not read settings")
 			return
 		}
-		if k != notifications.SettingsKey {
+		if k != notifications.SettingsKey && k != curseforge.SettingsKey {
 			settings[k] = v
 		}
 	}
@@ -40,6 +41,10 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, ok := body.Settings[notifications.SettingsKey]; ok {
 		writeError(w, http.StatusBadRequest, "invalid_request", "use the Discord notification settings endpoint")
+		return
+	}
+	if _, ok := body.Settings[curseforge.SettingsKey]; ok {
+		writeError(w, http.StatusBadRequest, "invalid_request", "use the CurseForge settings endpoint")
 		return
 	}
 	if _, ok := body.Settings[servers.UpdateCheckerEnabledKey]; ok {

@@ -6,7 +6,7 @@ import {
 } from './modrinth';
 import { getHangarVersions } from './hangar';
 import { getSpigetVersions } from './spiget';
-import { getCurseForgeApiKey, getCurseForgeFiles, hasCurseForgeApiKey } from './curseforge';
+import { getCurseForgeFiles } from './curseforge';
 
 export interface AvailableModJar {
   hashes?: Record<string, string>;
@@ -168,13 +168,12 @@ export async function fetchModAvailableJars(
   }
 
   // 4. CurseForge files
-  if (provider === 'curseforge' && hasCurseForgeApiKey()) {
+  if (provider === 'curseforge') {
     const modId = parseInt(updateInfo?.projectId || mod.project_id || '', 10);
     if (!isNaN(modId)) {
       try {
         const files = await getCurseForgeFiles(
           modId,
-          getCurseForgeApiKey(),
           { gameVersion: serverVersion },
           signal,
         );

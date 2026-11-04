@@ -57,9 +57,7 @@ function recommendJava(ver: string, serverType?: ServerType): number {
 import {
   CF_CLASS_MODPACKS,
   CF_SORT_OPTIONS,
-  getCurseForgeApiKey,
   getCurseForgeFiles,
-  hasCurseForgeApiKey,
   searchCurseForge,
 } from '../api/curseforge';
 import { Badge } from './ui/badge';
@@ -68,6 +66,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { ProgressBar } from './ui/progress';
 import { Select } from './ui/select';
+import { useCurseForgeSettings } from '../lib/curseforge';
 
 export interface SelectedModpackState {
   source: 'modrinth' | 'curseforge';
@@ -143,6 +142,7 @@ export function CreateServerDialog({
 
   // Modpack search state
   const [searchSource, setSearchSource] = useState<'modrinth' | 'curseforge'>('modrinth');
+  const { settings: curseForgeSettings, loading: loadingCurseForgeSettings, error: curseForgeSettingsError } = useCurseForgeSettings(open && createMode === 'search-modpack' && searchSource === 'curseforge');
   const [searchQuery, setSearchQuery] = useState('');
   const [loaderFilter, setLoaderFilter] = useState('all');
   const [mrSort, setMrSort] = useState<'downloads' | 'relevance' | 'updated' | 'newest'>('downloads');
@@ -291,8 +291,7 @@ export function CreateServerDialog({
 
   // Search CurseForge Modpacks
   const executeCurseForgeSearch = useCallback(async () => {
-    const apiKey = getCurseForgeApiKey();
-    if (!apiKey) {
+    if (!curseForgeSettings?.configured) {
       setCfHits([]);
       return;
     }
@@ -317,7 +316,6 @@ export function CreateServerDialog({
           sortField: cfSort,
           pageSize: 12,
         },
-        apiKey,
       );
       setCfHits(res.data ?? []);
     } catch {
@@ -325,7 +323,7 @@ export function CreateServerDialog({
     } finally {
       setSearching(false);
     }
-  }, [searchQuery, loaderFilter, cfSort]);
+  }, [searchQuery, loaderFilter, cfSort, curseForgeSettings?.configured]);
 
   useEffect(() => {
     if (!open || createMode !== 'search-modpack' || selectedPack) return;
@@ -439,12 +437,11 @@ export function CreateServerDialog({
   }
 
   async function handleSelectCurseForgeHit(mod: CurseForgeMod) {
-    const apiKey = getCurseForgeApiKey();
-    if (!apiKey) return;
+    if (!curseForgeSettings?.configured) return;
     setSelectingPack(true);
     setError(null);
     try {
-      const files = await getCurseForgeFiles(mod.id, apiKey, { pageSize: 20 });
+      const files = await getCurseForgeFiles(mod.id, { pageSize: 20 });
       if (files.length === 0) throw new Error('No files found for this modpack');
       const validFiles = files.filter((f) => !!f.downloadUrl);
       if (validFiles.length === 0) throw new Error('No direct download files found');
@@ -792,16 +789,16 @@ export function CreateServerDialog({
                           <Loader2 className="h-4 w-4 animate-spin text-primary" />
                           Loading modpack details and compatible versions...
                         </div>
-                      ) : searching ? (
+                      ) : searching || (searchSource === 'curseforge' && loadingCurseForgeSettings) ? (
                         <div className="flex h-36 items-center justify-center gap-2 text-xs text-muted-foreground">
                           <Loader2 className="h-4 w-4 animate-spin text-primary" />
                           Searching modpacks...
                         </div>
-                      ) : searchSource === 'curseforge' && !hasCurseForgeApiKey() ? (
+                      ) : searchSource === 'curseforge' && !curseForgeSettings?.configured ? (
                         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-center text-xs space-y-1">
                           <p className="font-semibold text-foreground">CurseForge API Key Required</p>
                           <p className="text-muted-foreground text-[11px]">
-                            Configure your API key in Settings or use Modrinth.
+                            {curseForgeSettingsError || 'Ask an administrator to configure the shared key in App Settings → CurseForge, or use Modrinth.'}
                           </p>
                         </div>
                       ) : (searchSource === 'modrinth' ? mrHits.length === 0 : cfHits.length === 0) ? (

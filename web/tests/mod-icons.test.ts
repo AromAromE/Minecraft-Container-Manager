@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchInstalledModIcons } from '../src/api/mod-icons';
-import { CF_STORAGE_KEY } from '../src/api/curseforge';
 import { clearRateLimitCache } from '../src/api/rate-limited-fetch';
 import type { Mod } from '../src/api/types';
 import { catalogTarget, jsonResponse } from './catalog-fixtures';
@@ -13,17 +12,14 @@ describe('installed mod artwork', () => {
   beforeEach(() => {
     clearRateLimitCache();
     document.cookie = 'mcm_csrf=test-csrf; path=/';
-    localStorage.removeItem(CF_STORAGE_KEY);
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
     clearRateLimitCache();
-    localStorage.removeItem(CF_STORAGE_KEY);
   });
 
   it('resolves all providers, batches project lookups, and reuses cached responses', async () => {
-    localStorage.setItem(CF_STORAGE_KEY, 'test-key');
     const mods = [
       installedMod('fabric-api', { provider: 'modrinth', project_id: 'P7dR8mSH' }),
       installedMod('fabric-api-old', { provider: 'modrinth', project_id: 'P7dR8mSH' }),
@@ -70,7 +66,7 @@ describe('installed mod artwork', () => {
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
-  it('skips unknown projects, invalid numeric IDs, and CurseForge without credentials', async () => {
+  it('skips unknown projects and invalid numeric IDs', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
@@ -78,7 +74,7 @@ describe('installed mod artwork', () => {
       installedMod('custom'),
       installedMod('unidentified', { provider: 'modrinth' }),
       installedMod('unknown-provider', { project_id: '123' }),
-      installedMod('jei', { provider: 'curseforge', project_id: '238222' }),
+      installedMod('invalid-curseforge', { provider: 'curseforge', project_id: 'not-an-id' }),
       installedMod('invalid-spigot', { provider: 'spiget', project_id: 'not-an-id' }),
     ])).resolves.toEqual({});
     expect(fetchMock).not.toHaveBeenCalled();

@@ -129,17 +129,12 @@ func (s *Server) handleInstallModpack(w http.ResponseWriter, r *http.Request) {
 	serverID := r.PathValue("id")
 	contentType := r.Header.Get("Content-Type")
 
-	cfKey := r.Header.Get("x-curseforge-api-key")
-
 	// 1. Multipart Form Upload
 	if strings.HasPrefix(contentType, "multipart/form-data") {
 		r.Body = http.MaxBytesReader(w, r.Body, storage.MaxUploadBytes+(1<<20))
 		if err := r.ParseMultipartForm(8 << 20); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_request", "could not parse modpack upload")
 			return
-		}
-		if cfKey == "" {
-			cfKey = r.FormValue("curseforge_api_key")
 		}
 		file, _, err := r.FormFile("file")
 		if err != nil {
@@ -182,7 +177,6 @@ func (s *Server) handleInstallModpack(w http.ResponseWriter, r *http.Request) {
 		opts := servers.InstallModpackOpts{
 			Source:              "upload",
 			AutoConfigureServer: autoConfig,
-			CurseForgeAPIKey:    cfKey,
 			CreatedWithModpack:  createdWithModpack,
 		}
 
@@ -212,7 +206,6 @@ func (s *Server) handleInstallModpack(w http.ResponseWriter, r *http.Request) {
 		ProjectSlug         string `json:"project_slug"`
 		VersionID           string `json:"version_id"`
 		AutoConfigureServer bool   `json:"auto_configure_server"`
-		CurseForgeAPIKey    string `json:"curseforge_api_key"`
 		CreatedWithModpack  bool   `json:"created_with_modpack"`
 	}
 	if err := decodeJSON(w, r, &in); err != nil {
@@ -222,10 +215,6 @@ func (s *Server) handleInstallModpack(w http.ResponseWriter, r *http.Request) {
 	if in.URL == "" {
 		writeError(w, http.StatusBadRequest, "invalid_request", "url is required")
 		return
-	}
-
-	if in.CurseForgeAPIKey == "" {
-		in.CurseForgeAPIKey = cfKey
 	}
 
 	onDlProgress := func(written, total int64) {
@@ -276,7 +265,6 @@ func (s *Server) handleInstallModpack(w http.ResponseWriter, r *http.Request) {
 		ProjectSlug:         in.ProjectSlug,
 		VersionID:           in.VersionID,
 		AutoConfigureServer: in.AutoConfigureServer,
-		CurseForgeAPIKey:    in.CurseForgeAPIKey,
 		CreatedWithModpack:  in.CreatedWithModpack,
 	}
 

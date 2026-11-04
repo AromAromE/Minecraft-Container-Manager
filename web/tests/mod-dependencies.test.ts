@@ -420,7 +420,6 @@ describe('Mod Dependencies Resolution Engine', () => {
       const result = await resolveCurseForgeDependencies({
         file,
         primaryMod: { id: 500, slug: 'example', name: 'Example Mod' },
-        apiKey: 'test-key',
         gameVersion: '1.20.1',
         modLoaderType: 4,
         installedMods: [],

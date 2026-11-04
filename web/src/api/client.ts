@@ -473,35 +473,24 @@ export const api = {
   mods: (serverId: string) => request<ModList>(`/api/servers/${serverId}/mods`),
 
   checkModUpdates: (serverId: string, force?: boolean) => {
-    const cfHeader = typeof window !== 'undefined' && localStorage.getItem('mcm_curseforge_api_key')
-      ? { 'x-curseforge-api-key': localStorage.getItem('mcm_curseforge_api_key')!.trim() }
-      : undefined;
     return request<ServerModUpdatesResponse>(
       `/api/servers/${serverId}/mods/updates${force ? '?force=true' : '?cached=true'}`,
-      { headers: cfHeader },
     ).then((result) => force ? announceUpdateDiscovery(result) : result);
   },
 
   checkModUpdatesForce: (serverId: string) => {
-    const cfHeader = typeof window !== 'undefined' && localStorage.getItem('mcm_curseforge_api_key')
-      ? { 'x-curseforge-api-key': localStorage.getItem('mcm_curseforge_api_key')!.trim() }
-      : undefined;
     return request<ServerModUpdatesResponse>(
       `/api/servers/${serverId}/mods/updates/check`,
-      { method: 'POST', headers: cfHeader },
+      { method: 'POST' },
     ).then(announceUpdateDiscovery);
   },
 
   checkVersionUpgradeCompatibility: (serverId: string, targetVersion: string, force = false) => {
-    const cfHeader = typeof window !== 'undefined' && localStorage.getItem('mcm_curseforge_api_key')
-      ? { 'x-curseforge-api-key': localStorage.getItem('mcm_curseforge_api_key')!.trim() }
-      : undefined;
     const q = new URLSearchParams();
     if (targetVersion) q.set('target_version', targetVersion);
     if (force) q.set('force', 'true');
     return request<VersionUpdateReport>(
       `/api/servers/${serverId}/mods/upgrade-check?${q.toString()}`,
-      { headers: cfHeader },
     );
   },
 
@@ -529,12 +518,8 @@ export const api = {
     ),
 
   getModAvailableVersions: (serverId: string, modName: string) => {
-    const cfHeader = typeof window !== 'undefined' && localStorage.getItem('mcm_curseforge_api_key')
-      ? { 'x-curseforge-api-key': localStorage.getItem('mcm_curseforge_api_key')!.trim() }
-      : undefined;
     return request<AvailableModJar[]>(
       `/api/servers/${serverId}/mods/${encodeURIComponent(modName)}/versions`,
-      { headers: cfHeader },
     );
   },
 
@@ -862,29 +847,22 @@ export const api = {
     createdWithModpack = false,
     onProgress?: (loaded: number, total: number) => void,
   ) => {
-    const cfKey = typeof window !== 'undefined' ? localStorage.getItem('mcm_curseforge_api_key') : null;
     return uploadWithProgress<InstalledModpack>(
       `/api/servers/${serverId}/modpack/install`,
       [
         ['file', file],
         ['auto_configure_server', String(autoConfigureServer)],
         ['created_with_modpack', String(createdWithModpack)],
-        ...(cfKey ? [['curseforge_api_key', cfKey] as [string, string]] : []),
       ],
       onProgress,
     );
   },
 
   installModpackRemote: (serverId: string, options: InstallModpackOptions) => {
-    const cfKey =
-      options.curseforge_api_key ||
-      (typeof window !== 'undefined' ? localStorage.getItem('mcm_curseforge_api_key') ?? undefined : undefined);
     return request<InstalledModpack>(`/api/servers/${serverId}/modpack/install`, {
       method: 'POST',
-      headers: cfKey ? { 'x-curseforge-api-key': cfKey } : undefined,
       body: JSON.stringify({
         ...options,
-        curseforge_api_key: cfKey,
       }),
     });
   },

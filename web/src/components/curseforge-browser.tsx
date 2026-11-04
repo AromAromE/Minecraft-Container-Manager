@@ -5,7 +5,6 @@ import {
   Check,
   Download,
   ExternalLink,
-  Flame,
   Loader2,
   RefreshCw,
   Search,
@@ -17,14 +16,12 @@ import { api, ApiError } from '../api/client';
 import {
   CF_SORT_OPTIONS,
   findInstalledCurseForgeMod,
-  getCurseForgeApiKey,
   getCurseForgeClassId,
   getCurseForgeDownloadUrl,
   getCurseForgeFiles,
   getCurseForgeLoaderType,
   isCurseForgeModInstalled,
   searchCurseForge,
-  setCurseForgeApiKey,
 } from '../api/curseforge';
 import { extractModId, formatCount, formatFileSize } from '../api/modrinth';
 import type {
@@ -46,6 +43,9 @@ import {
 } from '../api/mod-dependencies';
 import { PluginCard, PluginEmptyState, PluginGridSkeleton } from './plugin-card';
 import { useModal } from './ui/modal';
+import { usePermissions } from '../lib/auth';
+import { useCurseForgeSettings } from '../lib/curseforge';
+import { CurseForgeSettings } from './curseforge-settings';
 
 interface CurseForgeBrowserProps {
   server: Server;
@@ -64,8 +64,9 @@ export function CurseForgeBrowser({
   onModInstalled,
   onModDeleted,
 }: CurseForgeBrowserProps) {
-  const [apiKey, setApiKey] = useState(() => getCurseForgeApiKey());
-  const [tempKey, setTempKey] = useState('');
+  const can = usePermissions();
+  const { settings: curseForgeSettings, loading: loadingSettings, error: settingsError, refresh: refreshSettings } = useCurseForgeSettings();
+  const configured = curseForgeSettings?.configured ?? false;
   const [showKeyConfig, setShowKeyConfig] = useState(false);
 
   const [query, setQuery] = useState('');
@@ -95,7 +96,7 @@ export function CurseForgeBrowser({
 
   const performSearch = useCallback(
     async (resetOffset = true) => {
-      if (!apiKey) return;
+      if (!configured) return;
 
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -123,7 +124,6 @@ export function CurseForgeBrowser({
             pageSize: 20,
             index: currentOffset,
           },
-          apiKey,
           controller.signal,
         );
 
@@ -143,11 +143,11 @@ export function CurseForgeBrowser({
         setLoadingMore(false);
       }
     },
-    [apiKey, query, classId, loaderType, server.version, sortField],
+    [configured, query, classId, loaderType, server.version, sortField],
   );
 
   useEffect(() => {
-    if (!apiKey) return;
+    if (!configured) return;
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
@@ -158,7 +158,7 @@ export function CurseForgeBrowser({
     return () => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     };
-  }, [apiKey, performSearch]);
+  }, [configured, performSearch]);
 
   useEffect(() => {
     if (!notification) return;
@@ -168,7 +168,7 @@ export function CurseForgeBrowser({
 
   // Load files when a mod is selected
   useEffect(() => {
-    if (!selectedMod || !apiKey) {
+    if (!selectedMod || !configured) {
       setFiles([]);
       setFileError(null);
       return;
@@ -178,7 +178,7 @@ export function CurseForgeBrowser({
     setLoadingFiles(true);
     setFileError(null);
 
-    getCurseForgeFiles(selectedMod.id, apiKey, {
+    getCurseForgeFiles(selectedMod.id, {
       gameVersion: server.version,
       modLoaderType: loaderType,
     })
@@ -197,7 +197,7 @@ export function CurseForgeBrowser({
     return () => {
       isMounted = false;
     };
-  }, [selectedMod, apiKey, server.version, loaderType]);
+  }, [selectedMod, configured, server.version, loaderType]);
 
   const { confirm, dialog } = useModal();
   const [updatePrompt, setUpdatePrompt] = useState<{
@@ -442,7 +442,7 @@ export function CurseForgeBrowser({
   }
 
   async function handleOneClickInstall(mod: CurseForgeMod) {
-    if (!apiKey) return;
+    if (!configured) return;
     setInstallingId(mod.id);
     setError(null);
 
@@ -454,7 +454,7 @@ export function CurseForgeBrowser({
       }
 
       if (!targetFile) {
-        const fls = await getCurseForgeFiles(mod.id, apiKey, {
+        const fls = await getCurseForgeFiles(mod.id, {
           gameVersion: server.version,
           modLoaderType: loaderType,
         });
@@ -473,7 +473,7 @@ export function CurseForgeBrowser({
 
       let downloadUrl = targetFile.downloadUrl;
       if (!downloadUrl) {
-        downloadUrl = await getCurseForgeDownloadUrl(mod.id, targetFile.id, apiKey);
+        downloadUrl = await getCurseForgeDownloadUrl(mod.id, targetFile.id);
       }
 
       // Check for dependencies before proceeding
@@ -482,7 +482,6 @@ export function CurseForgeBrowser({
           const resolution = await resolveCurseForgeDependencies({
             file: targetFile,
             primaryMod: mod,
-            apiKey,
             gameVersion: server.version,
             modLoaderType: loaderType,
             installedMods,
@@ -537,13 +536,13 @@ export function CurseForgeBrowser({
   }
 
   async function handleInstallFile(file: CurseForgeFile, modName: string) {
-    if (!apiKey || !selectedMod) return;
+    if (!configured || !selectedMod) return;
     setInstallingId(file.id);
 
     try {
       let downloadUrl = file.downloadUrl;
       if (!downloadUrl) {
-        downloadUrl = await getCurseForgeDownloadUrl(selectedMod.id, file.id, apiKey);
+        downloadUrl = await getCurseForgeDownloadUrl(selectedMod.id, file.id);
       }
 
       if (file.dependencies && file.dependencies.length > 0) {
@@ -551,7 +550,6 @@ export function CurseForgeBrowser({
           const resolution = await resolveCurseForgeDependencies({
             file,
             primaryMod: selectedMod ?? undefined,
-            apiKey,
             gameVersion: server.version,
             modLoaderType: loaderType,
             installedMods,
@@ -605,14 +603,6 @@ export function CurseForgeBrowser({
     }
   }
 
-  function handleSaveKey() {
-    const trimmed = tempKey.trim();
-    if (!trimmed) return;
-    setCurseForgeApiKey(trimmed);
-    setApiKey(trimmed);
-    setShowKeyConfig(false);
-  }
-
   function checkInstalled(mod: CurseForgeMod): boolean {
     if (installedSlugs.has(mod.slug) || installedSlugs.has(mod.name.toLowerCase())) {
       return true;
@@ -620,73 +610,18 @@ export function CurseForgeBrowser({
     return isCurseForgeModInstalled(mod, installedMods);
   }
 
-  // State: No API key configured
-  if (!apiKey || showKeyConfig) {
+  if (loadingSettings) {
+    return <p role="status" className="text-sm text-muted-foreground">Loading CurseForge settings…</p>;
+  }
+  if (settingsError) {
+    return <div role="alert" className="space-y-2"><p className="text-sm text-destructive">{settingsError}</p><Button variant="outline" onClick={() => void refreshSettings()}>Retry</Button></div>;
+  }
+  if (!configured || showKeyConfig) {
     return (
-      <Card className="max-w-xl mx-auto border-orange-500/30 ">
-        <CardContent className="space-y-4 p-5 sm:p-6">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-600">
-              <Flame className="h-5 w-5" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-base text-foreground">CurseForge API Key</h3>
-              <p className="text-xs text-muted-foreground">
-                Enter your free CurseForge API key to browse &amp; install mods directly.
-              </p>
-            </div>
-          </div>
-
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            CurseForge requires authentication for all API requests. You can generate a free Eternal API key in less than a minute on the CurseForge Console.
-          </p>
-
-          <div className="space-y-2">
-            <label htmlFor="curseforge-api-key" className="text-xs font-medium text-foreground">API Key</label>
-            <Input
-              id="curseforge-api-key"
-              type="password"
-              placeholder="Paste your CurseForge API key (e.g. $2a$10$...)"
-              value={tempKey}
-              onChange={(e) => setTempKey(e.target.value)}
-              className="text-xs font-mono"
-            />
-          </div>
-
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
-            <a
-              href="https://console.curseforge.com/#/api-keys"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs text-orange-600 hover:underline dark:text-orange-400"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              Get key on CurseForge Console
-            </a>
-
-            <div className="flex items-center gap-2">
-              {apiKey && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowKeyConfig(false)}
-                  className="text-xs"
-                >
-                  Cancel
-                </Button>
-              )}
-              <Button
-                size="sm"
-                onClick={handleSaveKey}
-                disabled={!tempKey.trim()}
-                className="text-xs bg-primary hover:bg-primary/90 text-primary-foreground"
-              >
-                Save &amp; Connect
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="max-w-xl mx-auto space-y-3">
+        <CurseForgeSettings onSaved={() => setShowKeyConfig(false)} />
+        {configured && <Button variant="outline" onClick={() => setShowKeyConfig(false)}>Back to catalog</Button>}
+      </div>
     );
   }
 
@@ -799,21 +734,20 @@ export function CurseForgeBrowser({
         <div className="flex items-center gap-2.5">
           <span className="flex h-2 w-2 rounded-full bg-orange-500" />
           <span>
-            <strong>CurseForge:</strong> Connected with custom API Key.
+            <strong>CurseForge:</strong> Connected with the shared server-side API key.
           </span>
         </div>
         <div className="flex items-center gap-3">
-          <button
+          {can('settings.manage') && <button
             type="button"
             onClick={() => {
-              setTempKey(apiKey);
               setShowKeyConfig(true);
             }}
             className="inline-flex items-center gap-1 font-semibold text-orange-600 hover:underline dark:text-orange-400"
           >
             <Settings className="h-3 w-3" />
             Config API Key
-          </button>
+          </button>}
           <a
             href="https://curseforge.com/minecraft"
             target="_blank"

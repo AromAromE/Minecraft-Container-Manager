@@ -27,6 +27,31 @@ func TestProxySSRFProtection(t *testing.T) {
 	}
 }
 
+func TestProxyDoesNotForwardSharedCredentialsOnRedirect(t *testing.T) {
+	var redirected atomic.Int32
+	destination := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		redirected.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer destination.Close()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("x-api-key") != "shared-key" {
+			t.Error("upstream did not receive credential")
+		}
+		http.Redirect(w, r, destination.URL, http.StatusFound)
+	}))
+	defer upstream.Close()
+	u, _ := url.Parse(upstream.URL)
+	svc := NewService()
+	svc.AddAllowedHost(u.Hostname())
+	headers := make(http.Header)
+	headers.Set("x-api-key", "shared-key")
+	resp, err := svc.Do(context.Background(), http.MethodGet, upstream.URL, nil, headers, false)
+	if err != nil || resp.StatusCode != http.StatusFound || redirected.Load() != 0 {
+		t.Fatalf("followed credential-bearing redirect: %+v %v (requests: %d)", resp, err, redirected.Load())
+	}
+}
+
 func TestProxyCachingAndSingleflight(t *testing.T) {
 	var hitCount int32
 

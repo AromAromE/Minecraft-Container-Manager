@@ -1,6 +1,7 @@
 import { catalogTarget, emptyCatalog, jsonResponse } from './catalog-fixtures';
 import { clearRateLimitCache } from '../src/api/rate-limited-fetch';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+import { renderWithAdmin as render } from '../src/test/auth';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../src/api/client';
@@ -235,8 +236,8 @@ describe('CatalogBrowser multi-provider component', () => {
     await user.click(cfTab);
 
     // Verify setup banner is shown
-    expect(screen.getByRole('heading', { name: /CurseForge API Key/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /CurseForge API Key/i })).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/Paste your CurseForge API key/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Save & Connect/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Save shared key/i })).toBeInTheDocument();
   });
 });

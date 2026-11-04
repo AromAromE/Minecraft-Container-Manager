@@ -6,30 +6,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/mcm-panel/mcm/internal/curseforge"
 	"github.com/mcm-panel/mcm/internal/proxy"
 )
-
-type contextKey string
-
-const CurseForgeAPIKeyContextKey contextKey = "curseforge_api_key"
-
-// WithCurseForgeAPIKey returns a new context carrying the CurseForge API key.
-func WithCurseForgeAPIKey(ctx context.Context, key string) context.Context {
-	return context.WithValue(ctx, CurseForgeAPIKeyContextKey, key)
-}
-
-func getCurseForgeKey(ctx context.Context) string {
-	if val, ok := ctx.Value(CurseForgeAPIKeyContextKey).(string); ok && val != "" {
-		return val
-	}
-	return os.Getenv("CURSEFORGE_API_KEY")
-}
 
 func cleanVersionString(v string) string {
 	v = strings.TrimSpace(strings.ToLower(v))
@@ -329,6 +313,10 @@ func (s *Store) CheckModUpdates(ctx context.Context, serverID string, force bool
 	if err != nil {
 		return nil, err
 	}
+	cfKey, err := curseforge.APIKey(ctx, s.db)
+	if err != nil {
+		return nil, fmt.Errorf("read CurseForge settings: %w", err)
+	}
 
 	if _, err := modDirForType(srv.ServerType); err != nil {
 		return &ServerModUpdatesResponse{
@@ -625,7 +613,6 @@ func (s *Store) CheckModUpdates(ctx context.Context, serverID string, force bool
 
 		// CurseForge provider
 		if mod.Provider == "curseforge" && mod.ProjectID != "" {
-			cfKey := getCurseForgeKey(ctx)
 			if cfKey != "" {
 				if modID, err := strconv.Atoi(mod.ProjectID); err == nil {
 					cfURL := fmt.Sprintf("https://api.curseforge.com/v1/mods/%d/files?pageSize=5", modID)
@@ -674,7 +661,7 @@ func (s *Store) CheckModUpdates(ctx context.Context, serverID string, force bool
 					}
 				}
 			} else {
-				upstreamErrors = append(upstreamErrors, "CurseForge checks require CURSEFORGE_API_KEY on the panel")
+				upstreamErrors = append(upstreamErrors, "CurseForge checks require a shared API key in App Settings or CURSEFORGE_API_KEY on the panel")
 			}
 			continue
 		}
@@ -783,6 +770,10 @@ func (s *Store) GetModAvailableJars(ctx context.Context, serverID, modName strin
 	srv, err := s.Get(ctx, serverID)
 	if err != nil {
 		return nil, err
+	}
+	cfKey, err := curseforge.APIKey(ctx, s.db)
+	if err != nil {
+		return nil, fmt.Errorf("read CurseForge settings: %w", err)
 	}
 
 	listRes, err := s.ListMods(ctx, serverID)
@@ -953,10 +944,10 @@ func (s *Store) GetModAvailableJars(ctx context.Context, serverID, modName strin
 			if serverVersion != "" {
 				cfURL += fmt.Sprintf("&gameVersion=%s", url.QueryEscape(serverVersion))
 			}
-			cfKey := getCurseForgeKey(ctx)
 			var hdr http.Header
 			if cfKey != "" {
-				hdr = http.Header{"x-api-key": []string{cfKey}}
+				hdr = make(http.Header)
+				hdr.Set("x-api-key", cfKey)
 			}
 			resp, err := px.Do(ctx, http.MethodGet, cfURL, nil, hdr, false)
 			if err == nil && resp.StatusCode == http.StatusOK {
@@ -1002,6 +993,10 @@ func (s *Store) CheckTargetVersionCompatibility(ctx context.Context, serverID, t
 	srv, err := s.Get(ctx, serverID)
 	if err != nil {
 		return nil, err
+	}
+	cfKey, err := curseforge.APIKey(ctx, s.db)
+	if err != nil {
+		return nil, fmt.Errorf("read CurseForge settings: %w", err)
 	}
 
 	if _, err := modDirForType(srv.ServerType); err != nil {
@@ -1276,14 +1271,14 @@ func (s *Store) CheckTargetVersionCompatibility(ctx context.Context, serverID, t
 
 		// CurseForge provider
 		if mod.Provider == "curseforge" && mod.ProjectID != "" {
-			cfKey := getCurseForgeKey(ctx)
 			if cfKey != "" {
 				if modID, err := strconv.Atoi(mod.ProjectID); err == nil {
 					cfURL := fmt.Sprintf("https://api.curseforge.com/v1/mods/%d/files?pageSize=10", modID)
 					if targetVersion != "" {
 						cfURL += fmt.Sprintf("&gameVersion=%s", url.QueryEscape(targetVersion))
 					}
-					hdr := http.Header{"x-api-key": []string{cfKey}}
+					hdr := make(http.Header)
+					hdr.Set("x-api-key", cfKey)
 					resp, err := px.Do(ctx, http.MethodGet, cfURL, nil, hdr, force)
 					if err == nil && resp.StatusCode == http.StatusOK {
 						var cfRes curseForgeFilesResponse

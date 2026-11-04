@@ -95,6 +95,7 @@ let mockDiscordSettings: DiscordSettings = {
 const mockSparkReports: Record<string, SparkReport> = {};
 const mockPerformanceModes: Record<string, PerformanceCollectionMode> = {};
 let mockUpdateChecker: UpdateCheckerStatus = { enabled: false, running: false, timezone: 'UTC', servers: {} };
+let mockCurseForgeConfigured = false;
 let mockPanelUpdate: PanelUpdateStatus = {
   build: { commit: '75f02c91d63c92478986b325ac5ddfde48f2cb31', built_at: '2026-10-28T03:30:00Z', dirty: false },
   supported: true, available: false,
@@ -102,6 +103,14 @@ let mockPanelUpdate: PanelUpdateStatus = {
 
 export function handleMockRequest<T>(path: string, init: RequestInit = {}): T | null {
   if (!isMock()) return null;
+
+  if (path === '/api/curseforge/settings') {
+    if (init.method === 'PUT') {
+      const input = JSON.parse(String(init.body)) as { api_key: string };
+      mockCurseForgeConfigured = !!input.api_key.trim();
+    }
+    return { configured: mockCurseForgeConfigured, source: mockCurseForgeConfigured ? 'database' : '' } as T;
+  }
 
   const jarCatalog = path.match(/^\/api\/jars\/([^/]+)\/versions(?:\/([^/]+)\/builds)?$/);
   if (jarCatalog) {

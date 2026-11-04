@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import { api, ApiError } from '../api/client';
 import {
-  getCurseForgeApiKey,
   getCurseForgeFiles,
 } from '../api/curseforge';
 import { getProjectVersions } from '../api/modrinth';
@@ -99,27 +98,22 @@ export function ModpacksPanel({
           .filter((v) => !!v.downloadUrl);
         setPackVersions(mapped);
       } else if (pack.format === 'curseforge' && pack.project_id) {
-        const apiKey = getCurseForgeApiKey();
-        if (apiKey) {
-          const files = await getCurseForgeFiles(Number(pack.project_id), apiKey, { pageSize: 25 });
-          const mapped = files
-            .filter((f) => !!f.downloadUrl)
-            .map((f) => ({
-              id: String(f.id),
-              name: f.displayName || f.fileName,
-              version_number: f.displayName || f.fileName,
-              game_versions: f.gameVersions || [],
-              loaders: f.gameVersions?.filter((v) =>
-                ['forge', 'fabric', 'neoforge', 'quilt'].includes(v.toLowerCase())
-              ) || [],
-              release_type: f.releaseType === 1 ? 'release' : f.releaseType === 2 ? 'beta' : 'alpha',
-              date_published: f.fileDate,
-              downloadUrl: f.downloadUrl as string,
-            }));
-          setPackVersions(mapped);
-        } else {
-          setPackVersions([]);
-        }
+        const files = await getCurseForgeFiles(Number(pack.project_id), { pageSize: 25 });
+        const mapped = files
+          .filter((f) => !!f.downloadUrl)
+          .map((f) => ({
+            id: String(f.id),
+            name: f.displayName || f.fileName,
+            version_number: f.displayName || f.fileName,
+            game_versions: f.gameVersions || [],
+            loaders: f.gameVersions?.filter((v) =>
+              ['forge', 'fabric', 'neoforge', 'quilt'].includes(v.toLowerCase())
+            ) || [],
+            release_type: f.releaseType === 1 ? 'release' : f.releaseType === 2 ? 'beta' : 'alpha',
+            date_published: f.fileDate,
+            downloadUrl: f.downloadUrl as string,
+          }));
+        setPackVersions(mapped);
       } else {
         setPackVersions([]);
       }

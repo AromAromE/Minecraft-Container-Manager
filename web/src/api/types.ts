@@ -973,7 +973,6 @@ export interface InstallModpackOptions {
   project_slug?: string;
   version_id?: string;
   auto_configure_server?: boolean;
-  curseforge_api_key?: string;
   created_with_modpack?: boolean;
 }
 
@@ -1042,4 +1041,3 @@ export interface PanelUpdateStatus {
   };
   log?: string;
 }
-
