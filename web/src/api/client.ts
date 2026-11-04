@@ -3,6 +3,7 @@ import { getArtifactHashes } from './artifact-hashes';
 import { handleMockRequest, isMock } from './demo-transport';
 import { ensureCsrf, safeMethods } from './csrf';
 import { announceUpdateDiscovery } from '../lib/update-discovery';
+import { observePanelBuild } from '../lib/panel-build';
 import type {
   PanelUpdateStatus,
   UpdateCheckerStatus,
@@ -113,6 +114,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     ...init,
     headers,
   });
+  observePanelBuild(res.headers?.get('X-MCM-Build-Commit') ?? null);
 
   if (!res.ok) {
     const error = await responseError(res);
@@ -125,6 +127,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
           ...init,
           headers,
         });
+        observePanelBuild(retryRes.headers?.get('X-MCM-Build-Commit') ?? null);
         if (retryRes.ok) {
           if (retryRes.status === 204) return undefined as T;
           return readResponse<T>(retryRes);

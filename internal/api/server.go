@@ -15,6 +15,7 @@ import (
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/mcm-panel/mcm/internal/auth"
 	"github.com/mcm-panel/mcm/internal/backups"
+	"github.com/mcm-panel/mcm/internal/buildinfo"
 	"github.com/mcm-panel/mcm/internal/config"
 	"github.com/mcm-panel/mcm/internal/db"
 	"github.com/mcm-panel/mcm/internal/dns"
@@ -304,8 +305,10 @@ func (s *Server) routes() {
 }
 
 func (s *Server) withMiddleware(next http.Handler) http.Handler {
+	commit := buildinfo.Current().Commit
 	var h http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-MCM-Build-Commit", commit)
 		if !csrfExempt(r) && !csrfTokenValid(r) {
 			writeError(w, http.StatusForbidden, "csrf_missing", "missing or invalid CSRF token")
 			return
@@ -400,6 +403,10 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "embedded frontend unavailable", http.StatusInternalServerError)
 		return
 	}
+	serveFrontend(w, r, sub)
+}
+
+func serveFrontend(w http.ResponseWriter, r *http.Request, sub fs.FS) {
 	path := strings.TrimPrefix(r.URL.Path, "/")
 	if path == "" {
 		path = "index.html"
@@ -421,6 +428,10 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	}
 	if ct := mime.TypeByExtension(filepath.Ext(path)); ct != "" {
 		w.Header().Set("Content-Type", ct)
+	}
+	if path == "index.html" {
+		// The entry document must not outlive the embedded frontend build.
+		w.Header().Set("Cache-Control", "no-store")
 	}
 	_, _ = w.Write(data)
 }

@@ -2,7 +2,9 @@ import { createRoot } from 'react-dom/client';
 import { StrictMode } from 'react';
 import { RouterProvider } from '@tanstack/react-router';
 import { createRouter } from './router';
+import { rememberBrowserBuild } from './lib/panel-build';
 
+rememberBrowserBuild();
 const router = createRouter();
 
 const container = document.getElementById('root');

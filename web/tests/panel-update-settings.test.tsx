@@ -4,19 +4,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../src/api/client';
 import type { PanelUpdateStatus } from '../src/api/types';
 import { PanelUpdateSettings } from '../src/components/panel-update-settings';
+import * as panelBuild from '../src/lib/panel-build';
 
 const commit = '1234567890abcdef1234567890abcdef12345678';
 const base: PanelUpdateStatus = { build: { commit, dirty: false }, supported: true, available: false };
 const available = { ...base, latest_commit: 'abcdef1234567890abcdef1234567890abcdef12', checked_at: '2026-10-28T10:00:00Z', available: true };
 
 describe('Panel software updates', () => {
-  beforeEach(() => { vi.restoreAllMocks(); vi.spyOn(api, 'getPanelUpdate').mockResolvedValue(base); });
+  beforeEach(() => { vi.restoreAllMocks(); window.localStorage.clear(); vi.spyOn(api, 'getPanelUpdate').mockResolvedValue(base); });
   afterEach(() => { vi.useRealTimers(); });
 
   it('shows the full build commit and explains unsupported deployments', async () => {
     vi.mocked(api.getPanelUpdate).mockResolvedValue({ ...base, supported: false, reason: 'Rebuild the container image.' });
     render(<PanelUpdateSettings />);
-    expect(await screen.findByText(commit)).toBeVisible();
+    expect(await screen.findAllByText(commit)).toHaveLength(2);
+    expect(screen.getByText('Browser build commit')).toBeVisible();
     expect(screen.getByText('Rebuild the container image.')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Check for panel updates' })).not.toBeInTheDocument();
   });
@@ -24,7 +26,7 @@ describe('Panel software updates', () => {
   it('checks, confirms, and sends the reviewed commit to the updater', async () => {
     const user = userEvent.setup();
     vi.spyOn(api, 'checkPanelUpdate').mockResolvedValue(available);
-    const start = vi.spyOn(api, 'startPanelUpdate').mockResolvedValue({ ...available, job: { state: 'succeeded', started_at: '', message: 'Panel update complete.' }, log: 'Readiness passed.' });
+    const start = vi.spyOn(api, 'startPanelUpdate').mockResolvedValue({ ...available, build: { ...base.build, commit: available.latest_commit }, available: false, job: { state: 'succeeded', started_at: '', message: 'Panel update complete.' }, log: 'Readiness passed.' });
     render(<PanelUpdateSettings />);
     await user.click(await screen.findByRole('button', { name: 'Check for panel updates' }));
     expect(await screen.findByText(available.latest_commit)).toBeVisible();
@@ -34,7 +36,7 @@ describe('Panel software updates', () => {
     expect(dialog).toHaveTextContent('backs up the panel database and settings');
     await user.click(within(dialog).getByRole('button', { name: 'Install update' }));
     expect(start).toHaveBeenCalledWith(available.latest_commit);
-    expect(await screen.findByRole('button', { name: 'Reload updated panel' })).toBeVisible();
+    expect(await screen.findByRole('button', { name: 'Full refresh' })).toBeVisible();
     expect(screen.getByRole('progressbar', { name: 'Panel update progress' })).toHaveAttribute('aria-valuenow', '100');
     await user.click(screen.getByText('Update log'));
     expect(screen.getByLabelText('Panel update log')).toHaveTextContent('Readiness passed.');
@@ -42,6 +44,39 @@ describe('Panel software updates', () => {
     expect(screen.getByRole('button', { name: 'Pause auto-scroll' })).toHaveFocus();
     await user.tab();
     expect(screen.getByRole('region', { name: 'Panel update log' })).toHaveFocus();
+  });
+
+  it('shows a completed update as history after loading the current browser build', async () => {
+    const user = userEvent.setup();
+    const completed: PanelUpdateStatus = { ...base, job: { state: 'succeeded', started_at: 'update-1', finished_at: '2026-10-28T10:00:00Z', message: 'Panel update complete. Reload the page to use the updated interface.' }, log: 'Readiness passed.' };
+    vi.mocked(api.getPanelUpdate).mockResolvedValue(completed);
+    const { unmount } = render(<PanelUpdateSettings />);
+    expect(await screen.findByText('Last update completed')).toBeVisible();
+    expect(screen.queryByText('Update complete')).not.toBeInTheDocument();
+    expect(screen.queryByText(completed.job!.message)).not.toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Full refresh' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Panel update log' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Update log' }));
+    expect(screen.getByRole('region', { name: 'Panel update log' })).toHaveTextContent('Readiness passed.');
+    unmount();
+    render(<PanelUpdateSettings />);
+    expect(await screen.findByText('Last update completed')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Full refresh' })).not.toBeInTheDocument();
+  });
+
+  it('keeps offering a full refresh if a cached bundle is still loaded, regardless of other tabs', async () => {
+    const user = userEvent.setup();
+    const refresh = vi.spyOn(panelBuild, 'fullRefreshPanel').mockImplementation(() => {});
+    vi.mocked(api.getPanelUpdate).mockResolvedValue({ ...base, build: { ...base.build, commit: available.latest_commit }, job: { state: 'succeeded', started_at: 'update-1', message: 'Reload the updated interface.' } });
+    window.localStorage.setItem(panelBuild.browserBuildStorageKey, available.latest_commit);
+    const { unmount } = render(<PanelUpdateSettings />);
+    await user.click(await screen.findByRole('button', { name: 'Full refresh' }));
+    expect(refresh).toHaveBeenCalledWith(available.latest_commit);
+    unmount();
+    render(<PanelUpdateSettings />);
+    expect(await screen.findByText('Update complete')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Full refresh' })).toBeVisible();
   });
 
   it('cancels without starting the update and keeps check errors visible', async () => {
@@ -99,6 +134,11 @@ describe('Panel software updates', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
     expect(screen.getByText('Step 6 of 6')).toBeVisible();
     expect(Number(bar.getAttribute('aria-valuenow'))).toBeLessThan(100);
+    vi.mocked(api.getPanelUpdate).mockResolvedValue({ ...running, build: { ...base.build, commit: available.latest_commit }, job: { ...running.job!, state: 'succeeded', message: 'Reload the updated interface.' } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(screen.getByText('Update complete')).toBeVisible();
+    expect(bar).toHaveAttribute('aria-valuenow', '100');
+    expect(screen.getByRole('button', { name: 'Full refresh' })).toBeVisible();
   });
 
   it('lets readers scroll back without new output pulling them down and resume following', async () => {
@@ -145,6 +185,6 @@ describe('Panel software updates', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Previous version restored.');
     expect(screen.getByRole('region', { name: 'Panel update log' })).toBeVisible();
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0');
-    expect(screen.queryByRole('button', { name: 'Reload updated panel' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Full refresh' })).not.toBeInTheDocument();
   });
 });

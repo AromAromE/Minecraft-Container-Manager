@@ -4,6 +4,7 @@ import { Archive, Box, ChevronRight, LogOut, Menu, Server, Settings2, Users, X }
 import { useAuth, usePermissions } from '../lib/auth';
 import { ThemeToggle } from './theme-toggle';
 import { Button } from './ui/button';
+import { PanelBuildNotice } from './panel-build-notice';
 
 const destinations = [
   { to: '/dashboard', label: 'Servers', icon: Server, permission: 'servers.view' },
@@ -75,6 +76,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           {menuOpen && <div id="mobile-navigation" className="border-t p-4 lg:hidden">{navigation(true)}<div className="mt-4 flex min-w-0 items-center justify-between gap-3 border-t pt-3"><Link to="/user-settings" search={{ tab: 'account' }} aria-current={current.to === userSettings.to ? 'page' : undefined} onClick={() => setMenuOpen(false)} className="min-w-0 rounded-md px-3 py-2 text-sm hover:bg-accent"><span className="block font-medium">User Settings</span><span className="block truncate text-xs text-muted-foreground">{user?.email}</span></Link><Button variant="ghost" size="sm" onClick={() => void logout()}><LogOut />Log out</Button></div></div>}
         </header>
+        <PanelBuildNotice />
         <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-[1480px] px-5 py-8 outline-none sm:px-8 lg:px-10 lg:py-10">{children}</main>
         <footer className="mx-auto flex max-w-[1480px] flex-wrap items-center justify-between gap-2 px-5 py-6 text-xs text-muted-foreground sm:px-8 lg:px-10"><span>Minecraft Container Manager</span></footer>
       </div>

@@ -20,7 +20,8 @@ RUN if [ -f pnpm-lock.yaml ]; then \
         pnpm install; \
     fi
 
-RUN pnpm build
+ARG MCM_BUILD_COMMIT=unknown
+RUN MCM_BUILD_COMMIT="$MCM_BUILD_COMMIT" pnpm build
 
 ###############################################################################
 # Go build stage

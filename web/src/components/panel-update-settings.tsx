@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowDownToLine, Check, ChevronDown, Download, Pause, Play, RefreshCw } from 'lucide-react';
 import { api } from '../api/client';
 import type { PanelUpdateStatus } from '../api/types';
+import { browserBuildCommit, browserBuildNeedsRefresh, fullRefreshPanel, observePanelBuild } from '../lib/panel-build';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { useModal } from './ui/modal';
@@ -11,21 +12,23 @@ function message(error: unknown) {
   return error instanceof Error ? error.message : 'Could not contact the panel. Try again.';
 }
 
-function PanelUpdateProgress({ job, log, reconnecting }: {
+function PanelUpdateProgress({ job, log, reconnecting, buildCommit }: {
   job: NonNullable<PanelUpdateStatus['job']>;
   log?: string;
   reconnecting: boolean;
+  buildCommit: string;
 }) {
   const running = job.state === 'queued' || job.state === 'running';
   const succeeded = job.state === 'succeeded';
   const failed = job.state === 'failed';
+  const historical = succeeded && !browserBuildNeedsRefresh(buildCommit);
   const [logsOpen, setLogsOpen] = useState(running || failed);
   const [following, setFollowing] = useState(true);
   const logRef = useRef<HTMLPreElement>(null);
   const logId = useId();
   const progress = job.progress;
   const hasSteps = !!progress && progress.step > 0 && progress.total > 0;
-  const title = succeeded ? 'Update complete' : failed ? 'Update failed' : progress?.title ?? (job.state === 'queued' ? 'Preparing update' : 'Updating panel');
+  const title = historical ? 'Last update completed' : succeeded ? 'Update complete' : failed ? 'Update failed' : progress?.title ?? (job.state === 'queued' ? 'Preparing update' : 'Updating panel');
   const stepText = hasSteps ? `Step ${progress.step} of ${progress.total}` : undefined;
   const value = succeeded ? 100 : hasSteps ? ((progress.step - 1) / progress.total) * 100 : null;
 
@@ -50,7 +53,7 @@ function PanelUpdateProgress({ job, log, reconnecting }: {
         </p>
         {running && stepText && <span className="text-xs tabular-nums text-muted-foreground">{stepText}</span>}
       </div>
-      <ProgressBar
+      {!historical && <ProgressBar
         aria-label="Panel update progress"
         aria-valuetext={`${title}${running && stepText ? `, ${stepText}` : ''}${reconnecting ? ', reconnecting to panel' : ''}`}
         value={failed && !hasSteps ? 0 : value}
@@ -58,12 +61,13 @@ function PanelUpdateProgress({ job, log, reconnecting }: {
         variant={failed ? 'destructive' : 'default'}
         animated={running}
         size="sm"
-      />
-      <p role={failed ? 'alert' : 'status'} className={`break-words text-sm ${failed ? 'text-destructive' : 'text-muted-foreground'}`}>
+      />}
+      {!historical && <p role={failed ? 'alert' : 'status'} className={`break-words text-sm ${failed ? 'text-destructive' : 'text-muted-foreground'}`}>
         {reconnecting ? 'The panel is reconnecting. Update progress and logs will resume automatically.' : job.message}
-      </p>
+      </p>}
+      {historical && job.finished_at && <p className="text-sm text-muted-foreground">Finished {new Date(job.finished_at).toLocaleString()}.</p>}
     </div>
-    {succeeded && <Button variant="outline" onClick={() => window.location.reload()}>Reload updated panel</Button>}
+    {succeeded && !historical && <Button variant="outline" onClick={() => fullRefreshPanel(buildCommit)}>Full refresh</Button>}
     <div className="min-w-0 space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Button variant="ghost" size="sm" aria-expanded={logsOpen} aria-controls={logId} onClick={() => setLogsOpen(!logsOpen)}>
@@ -102,6 +106,8 @@ export function PanelUpdateSettings() {
   const [reconnecting, setReconnecting] = useState(false);
   const { confirm, dialog } = useModal();
   const running = status?.job?.state === 'queued' || status?.job?.state === 'running';
+
+  useEffect(() => { observePanelBuild(status?.build.commit ?? null); }, [status?.build.commit]);
 
   useEffect(() => {
     let disposed = false;
@@ -156,6 +162,7 @@ export function PanelUpdateSettings() {
       {status && <>
         <dl className="space-y-3 text-sm">
           <div className="space-y-1"><dt className="text-muted-foreground">Build commit</dt><dd className="break-all font-mono select-all">{status.build.commit === 'unknown' ? 'Unavailable for this build' : status.build.commit}</dd></div>
+          <div className="space-y-1"><dt className="text-muted-foreground">Browser build commit</dt><dd className="break-all font-mono select-all">{browserBuildCommit === 'unknown' ? 'Unavailable for this build' : browserBuildCommit}</dd></div>
           {status.build.built_at && <div className="flex flex-wrap justify-between gap-2"><dt className="text-muted-foreground">Built</dt><dd>{new Date(status.build.built_at).toLocaleString()}</dd></div>}
           {status.build.dirty && <div className="text-muted-foreground"><dt className="sr-only">Source changes</dt><dd>This build includes local source changes.</dd></div>}
           {status.latest_commit && <div className="space-y-1 border-t pt-3"><dt className="text-muted-foreground">Latest tracked commit</dt><dd className="break-all font-mono select-all">{status.latest_commit}</dd></div>}
@@ -168,7 +175,7 @@ export function PanelUpdateSettings() {
             {status.available && <Button disabled={busy || running} onClick={() => void install()}><Download />Install panel update</Button>}
           </div>
         </>}
-        {status.job && <PanelUpdateProgress key={status.job.started_at} job={status.job} log={status.log} reconnecting={reconnecting} />}
+        {status.job && <PanelUpdateProgress key={status.job.started_at} job={status.job} log={status.log} reconnecting={reconnecting} buildCommit={status.build.commit} />}
       </>}
       {dialog}
     </CardContent>

@@ -261,9 +261,15 @@ changes. On a managed Linux installation, **Check for panel updates** reads the
 checkout's tracked branch. **Install panel update** confirms the target commit
 and starts the existing installer in a separate `mcm-update.service` user unit.
 The page shows update progress and a log, reconnects through the panel restart,
-and offers a reload when the update completes. Update results and the last
-32 KiB of log output remain available after restarting the panel. The full log
-is in `~/.config/mcm/panel-update/update.log` (or under `XDG_CONFIG_HOME`).
+and offers a full refresh when the update completes. The frontend's build commit
+is embedded in the browser bundle and saved as `mcm-browser-build-commit` in local
+storage. When it differs from the running panel's commit, a banner offers a
+cache-busting **Full refresh**, keeping the current page URL and saved preferences.
+Once the browser is on the current build, successful updates appear as history
+with a collapsed log, rather than a persistent completion/reload prompt. Update
+results and the last 32 KiB of log output remain available after restarting the
+panel. The full log is in `~/.config/mcm/panel-update/update.log` (or under
+`XDG_CONFIG_HOME`).
 
 Web updates require `git`, `systemd-run`, and `systemctl`, a clean source checkout
 on a branch, and a reachable Git remote using non-interactive credentials. They
