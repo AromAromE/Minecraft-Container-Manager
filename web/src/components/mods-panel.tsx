@@ -1,5 +1,5 @@
 import { usePermissions } from '../lib/auth';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   ArrowUpCircle,
@@ -33,8 +33,10 @@ import { VersionUpdateHelper } from './version-update-helper';
 
 import { extractModId } from '../api/modrinth';
 import { fetchInstalledModIcons, MOD_PROVIDER_LABELS } from '../api/mod-icons';
+import { resolveInstalledModMetadata } from '../api/mod-details';
 import type { ModUpdateInfo } from '../api/mod-updates';
 import { ModJarPickerDialog } from './mod-jar-picker-dialog';
+import { InstalledModDetailsDialog } from './installed-mod-details-dialog';
 
 function InstalledModIcon({ name, src }: { name: string; src?: string }) {
   const [failedSrc, setFailedSrc] = useState<string>();
@@ -71,7 +73,13 @@ export function ModsPanel({ server }: { server: Server }) {
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
   const [pickerMod, setPickerMod] = useState<{ mod: Mod; updateInfo?: ModUpdateInfo } | null>(null);
+  const [detailsModName, setDetailsModName] = useState<string | null>(null);
   const { confirm, dialog } = useModal();
+
+  const catalogItems = useMemo(
+    () => items.map((mod) => resolveInstalledModMetadata(mod, updates[mod.name])),
+    [items, updates],
+  );
 
   const unsupported = server.server_type === 'vanilla';
 
@@ -169,23 +177,12 @@ export function ModsPanel({ server }: { server: Server }) {
 
   useEffect(() => {
     let cancelled = false;
-    const catalogItems = items.map((mod) => {
-      const update = updates[mod.name];
-      if (!update || (mod.provider && mod.provider !== update.provider)) return mod;
-      return {
-        ...mod,
-        provider: mod.provider || update.provider,
-        project_id: mod.project_id || update.projectId,
-        project_slug: mod.project_slug || update.projectSlug,
-      };
-    });
-
     void fetchInstalledModIcons(catalogItems).then((icons) => {
       if (!cancelled) setModIcons(icons);
     });
 
     return () => { cancelled = true; };
-  }, [items, updates]);
+  }, [catalogItems]);
 
   async function upload(file: File) {
     setError(null);
@@ -383,10 +380,20 @@ export function ModsPanel({ server }: { server: Server }) {
     );
   }
 
-  const filteredItems = items.filter(
+  const filteredItems = catalogItems.filter(
     (m) =>
       m.name.toLowerCase().includes(installedSearch.toLowerCase()) ||
       m.file.toLowerCase().includes(installedSearch.toLowerCase()),
+  );
+
+  const detailsMod = catalogItems.find((mod) => mod.name === detailsModName);
+  const detailsDialog = detailsMod && (
+    <InstalledModDetailsDialog
+      key={`${server.id}:${detailsMod.name}`}
+      mod={detailsMod}
+      type={type}
+      onClose={() => setDetailsModName(null)}
+    />
   );
 
   if (!can('mods.manage', server.id)) return <div className="space-y-4">
@@ -401,7 +408,15 @@ export function ModsPanel({ server }: { server: Server }) {
           <li key={item.name} className="flex items-center gap-3 p-4 text-sm">
             <InstalledModIcon name={item.name} src={modIcons[item.name]} />
             <div className="min-w-0 space-y-1">
-              <p className="break-words font-medium">{item.name}</p>
+              <button
+                type="button"
+                onClick={() => setDetailsModName(item.name)}
+                aria-label={`View details for ${item.name}`}
+                aria-haspopup="dialog"
+                className="break-words rounded-sm text-left font-medium hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {item.name}
+              </button>
               {provider && <Badge variant="outline" className="text-[11px]">{MOD_PROVIDER_LABELS[provider]}</Badge>}
             </div>
           </li>
@@ -409,11 +424,13 @@ export function ModsPanel({ server }: { server: Server }) {
       })}
     </ul>
     {items.length === 0 && <p className="text-sm text-muted-foreground">No installed mods or plugins.</p>}
+    {detailsDialog}
   </div>;
 
   return (
     <>
       {dialog}
+      {detailsDialog}
 
       <div className="space-y-4">
         {/* Sub-navigation Tabs */}
@@ -548,7 +565,7 @@ export function ModsPanel({ server }: { server: Server }) {
                 <div>
                   <CardTitle className="text-base">Installed {label}</CardTitle>
                   <CardDescription>
-                    Enable, disable, delete, or upload custom {label.toLowerCase()}.
+                    Click a name for details. Enable, disable, delete, or upload custom {label.toLowerCase()}.
                   </CardDescription>
                 </div>
 
@@ -758,7 +775,15 @@ export function ModsPanel({ server }: { server: Server }) {
                           <InstalledModIcon name={m.name} src={modIcons[m.name]} />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <p className="truncate font-medium text-foreground">{m.name}</p>
+                              <button
+                                type="button"
+                                onClick={() => setDetailsModName(m.name)}
+                                aria-label={`View details for ${m.name}`}
+                                aria-haspopup="dialog"
+                                className="truncate rounded-sm text-left font-medium text-foreground hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              >
+                                {m.name}
+                              </button>
                               {provider && (
                                 <Badge variant="outline" className="text-[11px] px-1.5 py-0 font-medium shrink-0 text-muted-foreground">
                                   {MOD_PROVIDER_LABELS[provider]}

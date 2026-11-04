@@ -679,6 +679,7 @@ export interface ModrinthVersion {
 export interface ModrinthProject {
   id: string;
   slug: string;
+  project_type?: string;
   title: string;
   description: string;
   body?: string;
