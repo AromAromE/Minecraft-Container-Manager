@@ -32,13 +32,35 @@ import { ModpacksPanel } from './modpacks-panel';
 import { VersionUpdateHelper } from './version-update-helper';
 
 import { extractModId } from '../api/modrinth';
+import { fetchInstalledModIcons, MOD_PROVIDER_LABELS } from '../api/mod-icons';
 import type { ModUpdateInfo } from '../api/mod-updates';
 import { ModJarPickerDialog } from './mod-jar-picker-dialog';
+
+function InstalledModIcon({ name, src }: { name: string; src?: string }) {
+  const [failedSrc, setFailedSrc] = useState<string>();
+
+  return (
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-secondary/40">
+      {src && src !== failedSrc ? (
+        <img
+          src={src}
+          alt={`${name} icon`}
+          loading="lazy"
+          className="h-full w-full object-contain"
+          onError={() => setFailedSrc(src)}
+        />
+      ) : (
+        <Package aria-hidden="true" className="h-5 w-5 text-muted-foreground" />
+      )}
+    </div>
+  );
+}
 
 export function ModsPanel({ server }: { server: Server }) {
   const can = usePermissions();
   const [activeTab, setActiveTab] = useState<'installed' | 'modpacks' | 'updates' | 'version-helper' | 'browse'>('installed');
   const [items, setItems] = useState<Mod[]>([]);
+  const [modIcons, setModIcons] = useState<Record<string, string>>({});
   const [type, setType] = useState<'mods' | 'plugins'>('mods');
   const [installedModpack, setInstalledModpack] = useState<InstalledModpack | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -144,6 +166,26 @@ export function ModsPanel({ server }: { server: Server }) {
   useEffect(() => {
     void load(true);
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const catalogItems = items.map((mod) => {
+      const update = updates[mod.name];
+      if (!update || (mod.provider && mod.provider !== update.provider)) return mod;
+      return {
+        ...mod,
+        provider: mod.provider || update.provider,
+        project_id: mod.project_id || update.projectId,
+        project_slug: mod.project_slug || update.projectSlug,
+      };
+    });
+
+    void fetchInstalledModIcons(catalogItems).then((icons) => {
+      if (!cancelled) setModIcons(icons);
+    });
+
+    return () => { cancelled = true; };
+  }, [items, updates]);
 
   async function upload(file: File) {
     setError(null);
@@ -352,7 +394,20 @@ export function ModsPanel({ server }: { server: Server }) {
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {installedModpack && <p className="text-sm">Modpack: {installedModpack.name} · {installedModpack.version}</p>}
     <Input aria-label="Search installed mods" placeholder="Search installed content…" value={installedSearch} onChange={(event) => setInstalledSearch(event.target.value)} />
-    <ul className="divide-y rounded-lg border bg-card">{items.filter((item) => item.name.toLowerCase().includes(installedSearch.toLowerCase())).map((item) => <li key={item.name} className="break-words p-4 text-sm">{item.name}</li>)}</ul>
+    <ul className="divide-y rounded-lg border bg-card">
+      {filteredItems.map((item) => {
+        const provider = item.provider || updates[item.name]?.provider;
+        return (
+          <li key={item.name} className="flex items-center gap-3 p-4 text-sm">
+            <InstalledModIcon name={item.name} src={modIcons[item.name]} />
+            <div className="min-w-0 space-y-1">
+              <p className="break-words font-medium">{item.name}</p>
+              {provider && <Badge variant="outline" className="text-[11px]">{MOD_PROVIDER_LABELS[provider]}</Badge>}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
     {items.length === 0 && <p className="text-sm text-muted-foreground">No installed mods or plugins.</p>}
   </div>;
 
@@ -689,6 +744,7 @@ export function ModsPanel({ server }: { server: Server }) {
                 ) : (
                   filteredItems.map((m) => {
                     const updateInfo = updates[m.name];
+                    const provider = m.provider || updateInfo?.provider;
                     return (
                       <div
                         key={m.name}
@@ -698,32 +754,40 @@ export function ModsPanel({ server }: { server: Server }) {
                             : 'bg-card/60 hover:bg-secondary/20'
                         }`}
                       >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="truncate font-medium text-foreground">{m.name}</p>
-                            {updateInfo && (
-                              <Badge
-                                variant="outline"
-                                className="border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300 text-[11px] px-1.5 py-0 font-medium shrink-0 flex items-center gap-1"
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          <InstalledModIcon name={m.name} src={modIcons[m.name]} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="truncate font-medium text-foreground">{m.name}</p>
+                              {provider && (
+                                <Badge variant="outline" className="text-[11px] px-1.5 py-0 font-medium shrink-0 text-muted-foreground">
+                                  {MOD_PROVIDER_LABELS[provider]}
+                                </Badge>
+                              )}
+                              {updateInfo && (
+                                <Badge
+                                  variant="outline"
+                                  className="border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300 text-[11px] px-1.5 py-0 font-medium shrink-0 flex items-center gap-1"
+                                >
+                                  <ArrowUpCircle className="h-2.5 w-2.5" />
+                                  Update Available: {updateInfo.latestVersion}
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {m.file} ·{' '}
+                              <span
+                                className={
+                                  m.enabled
+                                    ? 'font-medium text-emerald-600 dark:text-emerald-400'
+                                    : 'text-muted-foreground'
+                                }
                               >
-                                <ArrowUpCircle className="h-2.5 w-2.5" />
-                                Update Available: {updateInfo.latestVersion}
-                              </Badge>
-                            )}
+                                {m.enabled ? 'enabled' : 'disabled'}
+                              </span>
+                              {m.version && ` · v${m.version}`}
+                            </p>
                           </div>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {m.file} ·{' '}
-                            <span
-                              className={
-                                m.enabled
-                                  ? 'font-medium text-emerald-600 dark:text-emerald-400'
-                                  : 'text-muted-foreground'
-                              }
-                            >
-                              {m.enabled ? 'enabled' : 'disabled'}
-                            </span>
-                            {m.version && ` · v${m.version}`}
-                          </p>
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">
                           {updateInfo && (

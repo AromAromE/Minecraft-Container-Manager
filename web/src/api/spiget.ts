@@ -101,6 +101,23 @@ export async function getSpigetVersions(
   }
 }
 
+/** Retrieves full details for a Spigot resource. */
+export async function getSpigetResource(
+  resourceId: number,
+  signal?: AbortSignal,
+): Promise<SpigetResource> {
+  return rateLimitedFetchJson<SpigetResource>(
+    `${SPIGET_API_BASE}/resources/${resourceId}`,
+    {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'mcm-panel/1.0',
+      },
+    },
+    { cacheTtlMs: 300000, signal },
+  );
+}
+
 /**
  * Resolves the display icon image URL or data URI for a Spigot resource.
  */
