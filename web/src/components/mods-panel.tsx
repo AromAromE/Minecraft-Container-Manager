@@ -5,6 +5,7 @@ import {
   ArrowUpCircle,
   CheckCircle2,
   Compass,
+  Download,
   DownloadCloud,
   FolderOpen,
   Loader2,
@@ -37,6 +38,7 @@ import { resolveInstalledModMetadata } from '../api/mod-details';
 import type { ModUpdateInfo } from '../api/mod-updates';
 import { ModJarPickerDialog } from './mod-jar-picker-dialog';
 import { InstalledModDetailsDialog } from './installed-mod-details-dialog';
+import { downloadModList } from '../lib/modlist-export';
 
 function InstalledModIcon({ name, src }: { name: string; src?: string }) {
   const [failedSrc, setFailedSrc] = useState<string>();
@@ -263,6 +265,15 @@ export function ModsPanel({ server }: { server: Server }) {
   const label = type === 'mods' ? 'Mods' : 'Plugins';
   const updateCount = Object.keys(updates).length;
 
+  function handleExportModList() {
+    setError(null);
+    try {
+      downloadModList(server, { type, items: catalogItems });
+    } catch {
+      setError(`Failed to export the ${type === 'mods' ? 'mod' : 'plugin'} list. Please try again.`);
+    }
+  }
+
   const [updatingBatch, setUpdatingBatch] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{
     current: number;
@@ -396,8 +407,25 @@ export function ModsPanel({ server }: { server: Server }) {
     />
   );
 
+  const exportButton = (
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={handleExportModList}
+      disabled={items.length === 0}
+      className="gap-1.5 text-xs"
+      title={`Download the full installed ${type} list as a text file`}
+    >
+      <Download aria-hidden="true" className="h-3.5 w-3.5" />
+      {type === 'mods' ? 'Export modlist' : 'Export plugin list'}
+    </Button>
+  );
+
   if (!can('mods.manage', server.id)) return <div className="space-y-4">
-    <div><h2 className="text-lg font-semibold">Installed mods & plugins</h2><p className="mt-1 text-sm text-muted-foreground">You have read-only access to installed content.</p></div>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div><h2 className="text-lg font-semibold">Installed mods & plugins</h2><p className="mt-1 text-sm text-muted-foreground">You have read-only access to installed content.</p></div>
+      {exportButton}
+    </div>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {installedModpack && <p className="text-sm">Modpack: {installedModpack.name} · {installedModpack.version}</p>}
     <Input aria-label="Search installed mods" placeholder="Search installed content…" value={installedSearch} onChange={(event) => setInstalledSearch(event.target.value)} />
@@ -569,7 +597,8 @@ export function ModsPanel({ server }: { server: Server }) {
                   </CardDescription>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {exportButton}
                   <Button
                     size="sm"
                     variant="outline"
@@ -694,7 +723,7 @@ export function ModsPanel({ server }: { server: Server }) {
                 </label>
               </div>
 
-              {error && <p className="text-sm text-destructive">{error}</p>}
+              {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
               {uploadProgress !== null && (
                 <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 animate-fadeIn">

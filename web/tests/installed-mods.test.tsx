@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../src/api/client';
@@ -6,6 +6,7 @@ import * as modDetails from '../src/api/mod-details';
 import * as modIcons from '../src/api/mod-icons';
 import type { Mod, Server } from '../src/api/types';
 import { ModsPanel } from '../src/components/mods-panel';
+import * as modListExport from '../src/lib/modlist-export';
 import { adminUser, renderWithAdmin, renderWithUser } from '../src/test/auth';
 
 const server: Server = {
@@ -79,6 +80,86 @@ describe('installed mods and plugins list', () => {
     expect(within(list).getByText('Hangar')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Enable' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+  });
+
+  it('exports the full installed list in one click even when search hides entries', async () => {
+    const download = vi.spyOn(modListExport, 'downloadModList').mockImplementation(() => {});
+    const user = userEvent.setup();
+    renderWithAdmin(<ModsPanel server={server} />);
+    await screen.findByRole('button', { name: 'View details for fabric-api' });
+    await user.type(screen.getByPlaceholderText('Filter installed mods...'), 'fabric-api');
+    expect(screen.queryByRole('button', { name: 'View details for chunky' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Export modlist' }));
+
+    expect(download).toHaveBeenCalledExactlyOnceWith(server, { type: 'mods', items: mods });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(modDetails.fetchInstalledModDetails).not.toHaveBeenCalled();
+    expect(api.mods).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows read-only users to export the full plugin list', async () => {
+    const download = vi.spyOn(modListExport, 'downloadModList').mockImplementation(() => {});
+    const pluginServer: Server = { ...server, server_type: 'paper' };
+    vi.mocked(api.mods).mockResolvedValue({ type: 'plugins', items: [mods[1]] });
+    renderWithUser(<ModsPanel server={pluginServer} />, {
+      ...adminUser, role: 'custom', permissions: ['servers.view', 'mods.view'],
+    });
+    await screen.findByRole('button', { name: 'View details for chunky' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export plugin list' }));
+
+    expect(download).toHaveBeenCalledExactlyOnceWith(pluginServer, { type: 'plugins', items: [mods[1]] });
+    expect(screen.queryByRole('button', { name: 'Enable' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+  });
+
+  it('exports discovered installed versions without using newer releases or mixing providers', async () => {
+    const download = vi.spyOn(modListExport, 'downloadModList').mockImplementation(() => {});
+    vi.mocked(api.checkModUpdates).mockResolvedValue({
+      last_checked: '', updates: Object.fromEntries(['custom', 'chunky'].map((name) => [name, {
+        mod_name: name, mod_file: `${name}.jar`, provider: 'modrinth' as const,
+        project_id: 'discovered-id', title: 'Discovered mod',
+        current_version: '1.0', latest_version: '2.0', latest_jar: `${name}-2.0.jar`,
+      }])),
+    });
+    renderWithAdmin(<ModsPanel server={server} />);
+    await waitFor(() => expect(screen.getAllByText('Update Available: 2.0')).toHaveLength(2));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export modlist' }));
+
+    expect(download).toHaveBeenCalledExactlyOnceWith(server, {
+      type: 'mods', items: mods.map((mod) => mod.name === 'custom' ? {
+        ...mod, provider: 'modrinth', project_id: 'discovered-id', project_slug: undefined,
+        title: 'Discovered mod', version: '1.0',
+      } : mod),
+    });
+  });
+
+  it('disables export before content loads and when no mods are installed', async () => {
+    const download = vi.spyOn(modListExport, 'downloadModList').mockImplementation(() => {});
+    vi.mocked(api.mods).mockResolvedValue({ type: 'mods', items: [] });
+    renderWithAdmin(<ModsPanel server={server} />);
+    expect(screen.getByRole('button', { name: 'Export modlist' })).toBeDisabled();
+    await screen.findByText('No mods installed yet.');
+    fireEvent.click(screen.getByRole('button', { name: 'Export modlist' }));
+    expect(download).not.toHaveBeenCalled();
+  });
+
+  it('shows an error if the browser cannot start an export', async () => {
+    vi.spyOn(modListExport, 'downloadModList').mockImplementation(() => { throw new Error('Download blocked'); });
+    renderWithAdmin(<ModsPanel server={server} />);
+    await screen.findByRole('button', { name: 'View details for fabric-api' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export modlist' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Failed to export the mod list. Please try again.');
+  });
+
+  it('does not offer modlist export on unsupported vanilla servers', async () => {
+    await act(async () => { renderWithAdmin(<ModsPanel server={{ ...server, server_type: 'vanilla' }} />); });
+    expect(screen.queryByRole('button', { name: 'Export modlist' })).not.toBeInTheDocument();
+    expect(api.mods).not.toHaveBeenCalled();
   });
 
   it('uses provider metadata discovered by the update check without mixing catalogs', async () => {

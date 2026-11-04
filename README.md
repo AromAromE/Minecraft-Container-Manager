@@ -135,6 +135,7 @@ a container.
   - **SpigotMC (via Spiget)**: Over 100,000 Bukkit and Spigot plugins.
   - **CurseForge**: Expansive catalog of mods and server addons.
 - **Mod Management**: Enable/disable mods with `.disabled` toggling, view installed metadata, and delete mods.
+- **One-Click Modlist Export**: Download a shareable `.txt` list from Installed Mods or Plugins, including server details, installed versions, filenames, enabled/disabled status, and known catalog links. Exports include the full list regardless of search filters and are available with read-only access.
 
 ### 📊 Real-Time Metrics & Container Monitoring
 - **Dashboard Host Resources**: Live CPU, memory, and network usage summed across active managed server containers, with CPU and memory compared against the Docker or Podman host's capacity. The resource viewer refreshes every five seconds and shows available, used, and total space on the filesystem containing `MCM_DATA_DIR`. Available disk space excludes filesystem reservations and remains visible when the runtime is offline. Container usage excludes other host processes; it is not a sum of configured limits.
