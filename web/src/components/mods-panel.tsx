@@ -579,7 +579,7 @@ export function ModsPanel({ server }: { server: Server }) {
                     subtext={`Updating compatible ${label.toLowerCase()} (${batchProgress.current}/${batchProgress.total})`}
                     value={batchProgress.percent}
                     variant={batchProgress.percent === 100 ? 'emerald' : 'default'}
-                    className="h-2"
+                    size="sm"
                   />
                 </div>
               )}

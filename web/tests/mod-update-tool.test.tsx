@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../src/api/client';
 import { fetchModAvailableJars } from '../src/api/mod-updates';
 import { clearRateLimitCache } from '../src/api/rate-limited-fetch';
-import type { Mod, Server } from '../src/api/types';
+import type { BatchUpdateModsResult, Mod, Server, TaskProgress } from '../src/api/types';
 import { ModsPanel } from '../src/components/mods-panel';
 import { ModJarPickerDialog } from '../src/components/mod-jar-picker-dialog';
 
@@ -442,7 +442,7 @@ describe('Mod Update Tool & Jar Picker', () => {
       expect(checkSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('supports 1-click batch update of all outdated mods from quick action banner', async () => {
+    it('supports 1-click batch updates with progress sized to stay inside the banner', async () => {
       const user = userEvent.setup();
 
       const installedMods: Mod[] = [
@@ -478,13 +478,13 @@ describe('Mod Update Tool & Jar Picker', () => {
         last_checked: new Date().toISOString(),
       });
 
-      let progressCb: ((p: any) => void) | null = null;
+      let progressCb: ((p: TaskProgress) => void) | null = null;
       vi.spyOn(api, 'subscribeTaskEvents').mockImplementation((_sid, cb) => {
         progressCb = cb;
         return () => {};
       });
 
-      const batchUpdateSpy = vi.spyOn(api, 'batchUpdateMods').mockResolvedValue({
+      const batchResult: BatchUpdateModsResult = {
         updated: 1,
         failed: 0,
         target_version: '1.21.1',
@@ -497,7 +497,11 @@ describe('Mod Update Tool & Jar Picker', () => {
             new_jar: 'fabric-api-0.105.0.jar',
           },
         ],
-      });
+      };
+      let finishBatch!: (result: BatchUpdateModsResult) => void;
+      const batchUpdateSpy = vi.spyOn(api, 'batchUpdateMods').mockImplementation(
+        () => new Promise((resolve) => { finishBatch = resolve; }),
+      );
 
       render(<ModsPanel server={mockServer} />);
 
@@ -518,16 +522,30 @@ describe('Mod Update Tool & Jar Picker', () => {
 
       expect(batchUpdateSpy).toHaveBeenCalledWith('srv-update-test');
 
+      // Only the track has a fixed height; the wrapper must also fit the label.
+      const bar = screen.getByRole('progressbar');
+      expect(bar).toHaveClass('h-2');
+      expect(bar.parentElement).not.toHaveClass('h-2');
+      expect(bar.parentElement).toContainElement(screen.getByText('Preparing updates...'));
+      expect(bar).toHaveAttribute('aria-valuenow', '0');
+
       // Simulate SSE event
       await act(async () => {
         progressCb?.({
           server_id: 'srv-update-test',
           operation: 'mod_update_batch',
-          current: 1,
+          stage: 'downloading',
+          current: 0,
           total: 1,
-          percent: 100,
-          message: 'Updated Fabric API',
+          percent: 50,
+          message: 'Downloading Fabric API',
         });
+      });
+      expect(bar).toHaveAttribute('aria-valuenow', '50');
+      expect(screen.getByText('Downloading Fabric API')).toBeInTheDocument();
+
+      await act(async () => {
+        finishBatch(batchResult);
       });
 
       // Verify success banner appears
