@@ -165,6 +165,7 @@ export function handleMockRequest<T>(path: string, init: RequestInit = {}): T | 
     return {
       start: new Date(start).toISOString(), end: new Date(end).toISOString(),
       resolution_seconds: resolution, interval_seconds: 30, retention_days: 7,
+      cpu_cores: 8,
       settings: { collection_mode: mode },
       spark: { available: true, source: 'bundled' }, report: mockSparkReports[serverId] ?? null,
       samples: Array.from({ length: count }, (_, index) => {

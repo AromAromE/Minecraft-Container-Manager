@@ -229,8 +229,8 @@ export const api = {
       return Promise.resolve<ServerStats>({
         server_id: id,
         online: true,
-        cpu_percent: 14.8,
-        cpu_cores: 4,
+        cpu_percent: 118.4,
+        cpu_cores: 8,
         cpu_limit: 2,
         memory_bytes: 1845493760,
         memory_limit_bytes: 4294967296,

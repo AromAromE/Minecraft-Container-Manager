@@ -4,6 +4,7 @@ import { ExternalLink, Loader2, RefreshCw, Zap } from 'lucide-react';
 import { api, ApiError } from '../api/client';
 import type { PerformanceCollectionMode, PerformanceHistory, PerformanceRange, PerformanceSample, SparkReport } from '../api/types';
 import { formatBytes } from '../lib/formatters';
+import { hostCPUPercent } from '../lib/metrics';
 import { Button } from './ui/button';
 import { Select } from './ui/select';
 import { Skeleton } from './ui/skeleton';
@@ -35,8 +36,8 @@ function MetricChart({ history, metric, title, description, format, minimumScale
   const { samples } = history;
   const start = new Date(history.start).getTime();
   const end = new Date(history.end).getTime();
-  const values = samples.map((sample) => validValue(sample, metric));
-  const maximum = Math.max(minimumScale, ...values.filter((value): value is number => value !== null)) * 1.08;
+  const values = samples.map((sample) => metric === 'cpu_percent' ? hostCPUPercent(sample.cpu_percent, history.cpu_cores) : validValue(sample, metric));
+  const maximum = metric === 'cpu_percent' ? 100 : Math.max(minimumScale, ...values.filter((value): value is number => value !== null)) * 1.08;
   const x = (sample: PerformanceSample) => Math.max(0, Math.min(600, (new Date(sample.timestamp).getTime() - start) / Math.max(1, end - start) * 600));
   const y = (value: number) => 155 - value / maximum * 150;
   let path = '';
@@ -207,7 +208,7 @@ export function PerformancePanel({ serverId, isRunning }: { serverId: string; is
           <span>{range === '1h' ? '30-second readings' : `${shared.history.resolution_seconds / 60}-minute averages · peak player count`}</span>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
-          <MetricChart {...shared} metric="cpu_percent" title="CPU usage" format={(value) => `${value.toFixed(1)}%`} minimumScale={100} description="Container CPU. 100% equals one fully used core." />
+          <MetricChart {...shared} metric="cpu_percent" title="CPU usage" format={(value) => `${value.toFixed(1)}%`} minimumScale={100} description={shared.history.cpu_cores > 0 ? 'Container CPU as a share of the host. 100% equals all host CPU cores.' : 'Host CPU capacity is unavailable. CPU history cannot be normalized.'} />
           <MetricChart {...shared} metric="memory_bytes" title="Memory" format={formatBytes} minimumScale={1024 ** 2} description="Total memory used by the container." />
           <MetricChart {...shared} metric="players" title="Player count" format={(value) => String(Math.round(value))} minimumScale={1} description="Connected players; longer ranges show the peak in each interval." className="md:col-span-2" />
           <MetricChart {...shared} metric="tps" title="TPS" format={(value) => value.toFixed(1)} minimumScale={20} reference={20} description="Spark's 5-second TPS. The dashed line marks 20 TPS." />

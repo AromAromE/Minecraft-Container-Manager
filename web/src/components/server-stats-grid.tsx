@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, Cpu, HardDrive, Layers, Network } from 'lucide-reac
 import { api } from '../api/client';
 import type { ServerStats } from '../api/types';
 import { formatBytes } from '../lib/formatters';
+import { hostCPUPercent } from '../lib/metrics';
 
 export function ServerStatsGrid({ serverId, isRunning }: { serverId: string; isRunning: boolean }) {
   const [stats, setStats] = useState<ServerStats | null>(null);
@@ -16,22 +17,23 @@ export function ServerStatsGrid({ serverId, isRunning }: { serverId: string; isR
     return () => clearInterval(interval);
   }, [isRunning, fetchStats]);
   const online = isRunning && (stats?.online ?? false);
-  const cpu = online ? stats?.cpu_percent ?? 0 : 0;
+  const cpu = online ? hostCPUPercent(stats?.cpu_percent, stats?.cpu_cores) : 0;
   const memory = online ? stats?.memory_bytes ?? 0 : 0;
   const memoryLimit = stats?.memory_limit_bytes ?? 0;
   const memoryPercent = online && memoryLimit > 0 ? stats?.memory_percent ?? 0 : 0;
   const disk = stats?.disk_bytes ?? 0;
   const stateLabel = online ? 'Live' : 'Offline';
-  function meter(value: number, label: string) {
-    return <div role="meter" aria-label={label} aria-valuenow={Math.round(value)} aria-valuemin={0} aria-valuemax={100} className="mt-3 h-1 overflow-hidden rounded-full bg-muted"><div className={`h-full rounded-full transition-[width] duration-300 ${value > 90 ? 'bg-destructive' : 'bg-primary'}`} style={{ width: `${Math.min(Math.max(value, 0), 100)}%` }} /></div>;
+  function meter(value: number | null, label: string) {
+    if (value === null) return <div className="mt-3 h-1 rounded-full bg-muted" />;
+    return <div role="meter" aria-label={label} aria-valuenow={Number(value.toFixed(1))} aria-valuemin={0} aria-valuemax={100} className="mt-3 h-1 overflow-hidden rounded-full bg-muted"><div className={`h-full rounded-full transition-[width] duration-300 ${value > 90 ? 'bg-destructive' : 'bg-primary'}`} style={{ width: `${Math.min(Math.max(value, 0), 100)}%` }} /></div>;
   }
   return (
     <div data-testid="server-stats-grid" className="server-metrics">
       <div data-testid="stat-cpu" className="server-metric">
         <div className="flex items-center justify-between text-xs text-muted-foreground"><span>CPU usage</span><Cpu className="h-4 w-4" strokeWidth={1.5} /></div>
-        <div className="mt-3 flex flex-wrap items-baseline gap-x-2"><span data-testid="stat-cpu-value" className="metric-value">{cpu.toFixed(1)}%</span>{online && (stats?.cpu_limit ?? 0) > 0 && <span className="text-xs text-muted-foreground">/ {stats?.cpu_limit} cores</span>}</div>
+        <div className="mt-3 flex flex-wrap items-baseline gap-x-2"><span data-testid="stat-cpu-value" className="metric-value">{cpu === null ? '—' : `${cpu.toFixed(1)}%`}</span>{online && (stats?.cpu_limit ?? 0) > 0 && <span className="text-xs text-muted-foreground">Limit: {stats?.cpu_limit} cores</span>}</div>
         {meter(cpu, 'CPU usage')}
-        <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>{stats?.cpu_cores ? `${stats.cpu_cores} cores detected` : 'Container CPU'}</span><span>{stateLabel}</span></div>
+        <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>{stats?.cpu_cores ? `Of host CPU · ${stats.cpu_cores} cores` : 'Of host CPU'}</span><span>{cpu === null ? 'Unavailable' : stateLabel}</span></div>
       </div>
       <div data-testid="stat-mem" className="server-metric">
         <div className="flex items-center justify-between text-xs text-muted-foreground"><span>Memory</span><Layers className="h-4 w-4" strokeWidth={1.5} /></div>

@@ -140,6 +140,7 @@ export interface HostCapacity {
 export interface ServerStats {
   server_id: string;
   online: boolean;
+  /** Docker-style usage: 100% per core. Divide by cpu_cores for whole-host usage. */
   cpu_percent: number;
   cpu_cores: number;
   cpu_limit: number;
@@ -164,6 +165,7 @@ export interface PerformanceSettings {
 export interface PerformanceSample {
   timestamp: string;
   online: boolean;
+  /** Docker-style usage: 100% per core, including previously stored history. */
   cpu_percent: number | null;
   memory_bytes: number | null;
   players: number | null;
@@ -183,6 +185,8 @@ export interface SparkReport {
 export interface PerformanceHistory {
   settings: PerformanceSettings;
   samples: PerformanceSample[];
+  /** Current daemon host logical CPU count; 0 when unavailable. */
+  cpu_cores: number;
   start: string;
   end: string;
   resolution_seconds: number;

@@ -140,7 +140,7 @@ a container.
 ### 📊 Real-Time Metrics & Container Monitoring
 - **Dashboard Host Resources**: Live CPU, memory, and network usage summed across active managed server containers, with CPU and memory compared against the Docker or Podman host's capacity. The resource viewer refreshes every five seconds and shows available, used, and total space on the filesystem containing `MCM_DATA_DIR`. Available disk space excludes filesystem reservations and remains visible when the runtime is offline. Container usage excludes other host processes; it is not a sum of configured limits.
 - **Live Container Resource Metrics**: Real-time stats polled directly from the Docker daemon:
-  - **CPU Utilization %**: Normalized across available host cores.
+  - **CPU Utilization %**: Shown as a share of the whole host in both live cards and performance charts: 100% means all logical CPU cores are busy. CPU quotas remain labeled in cores. For example, Docker-style 397% on an eight-core host displays as 49.6%.
   - **Memory Usage & Limits**: Real-time memory consumption, limits, and usage percentage.
   - **Network I/O**: Live incoming (`rx`) and outgoing (`tx`) network throughput.
   - **Block / Disk I/O**: Real-time disk read and write bytes.

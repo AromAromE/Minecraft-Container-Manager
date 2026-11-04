@@ -88,6 +88,9 @@ type SparkReport struct {
 }
 
 type PerformanceHistory struct {
+	// CPUCores is the daemon host's current logical CPU count. Samples retain
+	// Docker-style CPU percentages; clients divide by this count for host usage.
+	CPUCores          int                 `json:"cpu_cores"`
 	Samples           []PerformanceSample `json:"samples"`
 	Start             time.Time           `json:"start"`
 	End               time.Time           `json:"end"`
@@ -458,6 +461,16 @@ func (s *Store) PerformanceHistory(ctx context.Context, id, window string) (Perf
 	result.Report, err = s.latestSparkReport(ctx, id)
 	if err != nil {
 		return PerformanceHistory{}, err
+	}
+	// Query the daemon, not the panel process: it may run on a remote host or VM.
+	// Keep other history available if host capacity cannot currently be read.
+	if !isDockerNil(s.docker) {
+		capacityCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		capacity, err := s.docker.HostCapacity(capacityCtx)
+		cancel()
+		if err == nil && capacity.CPUCores > 0 {
+			result.CPUCores = capacity.CPUCores
+		}
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT (recorded_at / ?) * ?, MAX(online), AVG(cpu_percent), AVG(memory_bytes), MAX(players), AVG(tps), AVG(tick_ms)
 		FROM performance_samples WHERE server_id = ? AND recorded_at >= ? AND recorded_at <= ? GROUP BY recorded_at / ? ORDER BY recorded_at / ?`,

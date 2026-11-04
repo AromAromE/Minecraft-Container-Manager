@@ -1,5 +1,5 @@
 import { renderWithAdmin as render } from '../src/test/auth';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from '../src/api/client';
@@ -9,10 +9,11 @@ import { PerformancePanel } from '../src/components/performance-panel';
 const history = (overrides: Partial<PerformanceHistory> = {}): PerformanceHistory => ({
   start: '2026-10-27T10:00:00Z', end: '2026-10-27T11:00:00Z',
   interval_seconds: 30, resolution_seconds: 30, retention_days: 7,
+  cpu_cores: 8,
   settings: { collection_mode: 'off' },
   spark: { available: true, source: 'bundled' }, report: null,
   samples: [
-    { timestamp: '2026-10-27T10:59:00Z', online: true, cpu_percent: 150, memory_bytes: 1024 ** 3, players: 2, tps: 19, tick_ms: 35 },
+    { timestamp: '2026-10-27T10:59:00Z', online: true, cpu_percent: 397, memory_bytes: 1024 ** 3, players: 2, tps: 19, tick_ms: 35 },
     { timestamp: '2026-10-27T10:59:30Z', online: true, cpu_percent: 50, memory_bytes: 2 * 1024 ** 3, players: 0, tps: null, tick_ms: null },
   ], ...overrides,
 });
@@ -68,16 +69,46 @@ describe('PerformancePanel', () => {
     expect(await screen.findByRole('heading', { name: 'Performance history' })).toBeInTheDocument();
     const charts = await screen.findAllByRole('img', { name: /history\./ });
     expect(charts).toHaveLength(5);
-    expect(screen.getByText('50.0%')).toBeInTheDocument();
+    expect(within(charts[0].closest('figure')!).getByText('6.3%')).toBeInTheDocument();
+    expect(within(charts[0].closest('figure')!).getByText('100.0%')).toBeInTheDocument();
+    expect(screen.getByText('Container CPU as a share of the host. 100% equals all host CPU cores.')).toBeInTheDocument();
     expect(screen.getAllByText('—')).toHaveLength(2);
     fireEvent.keyDown(charts[0], { key: 'Home' });
-    expect(screen.getByText('150.0%')).toBeInTheDocument();
+    expect(screen.getByText('49.6%')).toBeInTheDocument();
+    expect(charts[0]).toHaveAccessibleName(/49\.6%/);
     expect(screen.getByText('35.0 ms')).toBeInTheDocument();
     expect(screen.getByText(/^Inspecting/)).toBeInTheDocument();
     fireEvent.keyDown(charts[0], { key: 'End' });
-    expect(screen.getByText('50.0%')).toBeInTheDocument();
+    expect(screen.getByText('6.3%')).toBeInTheDocument();
     fireEvent.keyDown(charts[0], { key: 'Escape' });
     expect(screen.queryByText(/^Inspecting/)).not.toBeInTheDocument();
+  });
+
+  it('keeps other history available when host CPU capacity is unavailable', async () => {
+    vi.spyOn(api, 'performanceHistory').mockResolvedValue(history({ cpu_cores: 0 }));
+    render(<PerformancePanel serverId="one" isRunning={false} />);
+
+    const chart = await screen.findByRole('img', { name: 'CPU usage history. No readings available.' });
+    expect(within(chart.closest('figure')!).getByText('—')).toBeInTheDocument();
+    expect(chart.querySelector('path')).toHaveAttribute('d', '');
+    expect(screen.getByText('Host CPU capacity is unavailable. CPU history cannot be normalized.')).toBeInTheDocument();
+    expect(screen.getByText('2 GB')).toBeInTheDocument();
+  });
+
+  it('preserves missing CPU readings as gaps and clamps CPU history to 100% of the host', async () => {
+    const samples = history().samples;
+    vi.spyOn(api, 'performanceHistory').mockResolvedValue(history({ samples: [
+      { ...samples[0], cpu_percent: null },
+      { ...samples[1], cpu_percent: 900 },
+    ] }));
+    render(<PerformancePanel serverId="one" isRunning />);
+
+    const chart = await screen.findByRole('img', { name: /^CPU usage history/ });
+    expect(within(chart.closest('figure')!).getAllByText('100.0%')).toHaveLength(2);
+    expect(chart.querySelector('path')).toHaveAttribute('d', 'M595.00,5.00 ');
+    fireEvent.keyDown(chart, { key: 'Home' });
+    expect(within(chart.closest('figure')!).getByText('—')).toBeInTheDocument();
+    expect(chart).toHaveAccessibleName(/Unavailable/);
   });
 
   it('loads another range and recovers from failed loading', async () => {

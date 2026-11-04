@@ -183,7 +183,7 @@ func TestPerformanceSamplingHistoryAndRetention(t *testing.T) {
 		t.Fatal(err)
 	}
 	history, err := s.PerformanceHistory(ctx, srv.ID, "1h")
-	if err != nil || len(history.Samples) != 1 {
+	if err != nil || len(history.Samples) != 1 || history.CPUCores != 4 {
 		t.Fatalf("history=%+v err=%v", history, err)
 	}
 	sample := history.Samples[0]
@@ -219,6 +219,40 @@ func TestPerformanceSamplingHistoryAndRetention(t *testing.T) {
 	}
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM performance_samples`).Scan(&count); err != nil || count != 0 {
 		t.Fatalf("cascade count=%d err=%v", count, err)
+	}
+}
+
+func TestPerformanceHistoryHostCPUCores(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		runtime  *hostUsageRuntime
+		wantCPUs int
+	}{
+		{"daemon host cores", &hostUsageRuntime{capacity: docker.HostCapacity{CPUCores: 8}}, 8},
+		{"unknown host cores", &hostUsageRuntime{}, 0},
+		{"invalid host cores", &hostUsageRuntime{capacity: docker.HostCapacity{CPUCores: -1}}, 0},
+		{"daemon unavailable", &hostUsageRuntime{capacity: docker.HostCapacity{CPUCores: 8}, capacityErr: errors.New("offline")}, 0},
+		{"no runtime", nil, 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			s, srv := newPerformanceStore(t, "paper", "1.21.1", StateStopped)
+			if test.runtime != nil {
+				s.docker = test.runtime
+			}
+			// Existing rows remain in Docker-style units; only presentation changes.
+			_, err := s.db.Exec(`INSERT INTO performance_samples (server_id,recorded_at,online,cpu_percent,memory_bytes) VALUES (?,?,1,397,1024)`, srv.ID, time.Now().Add(-time.Minute).UnixMilli())
+			if err != nil {
+				t.Fatal(err)
+			}
+			history, err := s.PerformanceHistory(context.Background(), srv.ID, "1h")
+			if err != nil || history.CPUCores != test.wantCPUs || len(history.Samples) != 1 {
+				t.Fatalf("history=%+v err=%v", history, err)
+			}
+			sample := history.Samples[0]
+			if sample.CPUPercent == nil || *sample.CPUPercent != 397 || sample.MemoryBytes == nil || *sample.MemoryBytes != 1024 {
+				t.Fatalf("existing history was changed or lost: %+v", sample)
+			}
+		})
 	}
 }
 

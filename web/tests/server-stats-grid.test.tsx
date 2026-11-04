@@ -7,7 +7,7 @@ import { ServerStatsGrid } from '../src/components/server-stats-grid';
 const mockOnlineStats: ServerStats = {
   server_id: 'srv-1',
   online: true,
-  cpu_percent: 24.5,
+  cpu_percent: 98, // Docker-style usage: 24.5% of a four-core host.
   cpu_cores: 4,
   cpu_limit: 2,
   memory_bytes: 2147483648, // 2 GB
@@ -88,6 +88,48 @@ describe('ServerStatsGrid Component', () => {
 
     // Verify Offline label is shown
     expect(screen.getAllByText(/Offline/i).length).toBeGreaterThan(0);
+  });
+
+  it('shows 397% container usage as 49.6% of an eight-core host, not the CPU quota', async () => {
+    vi.spyOn(api, 'serverStats').mockResolvedValue({ ...mockOnlineStats, cpu_percent: 397, cpu_cores: 8, cpu_limit: 4 });
+    render(<ServerStatsGrid serverId="srv-1" isRunning />);
+
+    await waitFor(() => expect(screen.getByTestId('stat-cpu-value')).toHaveTextContent('49.6%'));
+    const meter = screen.getByRole('meter', { name: 'CPU usage' });
+    expect(meter).toHaveAttribute('aria-valuenow', '49.6');
+    expect(meter).toHaveAttribute('aria-valuemax', '100');
+    expect(meter.firstElementChild).toHaveStyle({ width: '49.625%' });
+    expect(meter.firstElementChild).not.toHaveClass('bg-destructive');
+    expect(screen.getByText('Of host CPU · 8 cores')).toBeInTheDocument();
+    expect(screen.getByText('Limit: 4 cores')).toBeInTheDocument();
+  });
+
+  it('keeps unlimited multi-core CPU usage within the whole-host meter range', async () => {
+    vi.spyOn(api, 'serverStats').mockResolvedValue({ ...mockOnlineStats, cpu_percent: 900, cpu_cores: 8, cpu_limit: 0 });
+    render(<ServerStatsGrid serverId="srv-1" isRunning />);
+
+    await waitFor(() => expect(screen.getByTestId('stat-cpu-value')).toHaveTextContent('100.0%'));
+    expect(screen.getByRole('meter', { name: 'CPU usage' })).toHaveAttribute('aria-valuenow', '100');
+    expect(screen.queryByText(/Limit:/)).not.toBeInTheDocument();
+  });
+
+  it('marks CPU unavailable instead of displaying per-core usage when host capacity is unknown', async () => {
+    vi.spyOn(api, 'serverStats').mockResolvedValue({ ...mockOnlineStats, cpu_cores: 0 });
+    render(<ServerStatsGrid serverId="srv-1" isRunning />);
+
+    await waitFor(() => expect(screen.getByTestId('stat-cpu-value')).toHaveTextContent('—'));
+    expect(screen.getByText('Unavailable')).toBeInTheDocument();
+    expect(screen.queryByRole('meter', { name: 'CPU usage' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('stat-mem-value')).toHaveTextContent('2 GB');
+  });
+
+  it('zeros CPU when stopped even if the last API reading was online', async () => {
+    vi.spyOn(api, 'serverStats').mockResolvedValue(mockOnlineStats);
+    render(<ServerStatsGrid serverId="srv-1" isRunning={false} />);
+
+    await waitFor(() => expect(api.serverStats).toHaveBeenCalled());
+    expect(screen.getByTestId('stat-cpu-value')).toHaveTextContent('0.0%');
+    expect(screen.getByRole('meter', { name: 'CPU usage' })).toHaveAttribute('aria-valuenow', '0');
   });
 
   it('handles API failure gracefully without crashing', async () => {
