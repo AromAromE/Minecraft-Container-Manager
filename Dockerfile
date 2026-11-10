@@ -57,7 +57,7 @@ RUN apk add --no-cache ca-certificates tzdata su-exec
 COPY --from=go /out/mcm /usr/local/bin/mcm
 COPY docker/entrypoint.sh /entrypoint.sh
 
-RUN chmod +x /entrypoint.sh && mkdir -p /data
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh && mkdir -p /data
 
 ENV MCM_ADDR=:8080 \
     MCM_DATA_DIR=/data

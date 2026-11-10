@@ -17,6 +17,7 @@ import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as UserSettingsRouteImport } from './routes/user-settings'
 import { Route as UsersRouteImport } from './routes/users'
+import { Route as ModpacksRouteImport } from './routes/modpacks'
 import { Route as ServersIdRouteImport } from './routes/servers.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -59,6 +60,11 @@ const UsersRoute = UsersRouteImport.update({
   path: '/users',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ModpacksRoute = ModpacksRouteImport.update({
+  id: '/modpacks',
+  path: '/modpacks',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ServersIdRoute = ServersIdRouteImport.update({
   id: '/servers/$id',
   path: '/servers/$id',
@@ -70,6 +76,7 @@ export interface FileRoutesByFullPath {
   '/backups': typeof BackupsRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/modpacks': typeof ModpacksRoute
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
   '/user-settings': typeof UserSettingsRoute
@@ -81,6 +88,7 @@ export interface FileRoutesByTo {
   '/backups': typeof BackupsRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/modpacks': typeof ModpacksRoute
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
   '/user-settings': typeof UserSettingsRoute
@@ -93,6 +101,7 @@ export interface FileRoutesById {
   '/backups': typeof BackupsRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/modpacks': typeof ModpacksRoute
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
   '/user-settings': typeof UserSettingsRoute
@@ -106,6 +115,7 @@ export interface FileRouteTypes {
     | '/backups'
     | '/dashboard'
     | '/login'
+    | '/modpacks'
     | '/onboarding'
     | '/settings'
     | '/user-settings'
@@ -117,6 +127,7 @@ export interface FileRouteTypes {
     | '/backups'
     | '/dashboard'
     | '/login'
+    | '/modpacks'
     | '/onboarding'
     | '/settings'
     | '/user-settings'
@@ -128,6 +139,7 @@ export interface FileRouteTypes {
     | '/backups'
     | '/dashboard'
     | '/login'
+    | '/modpacks'
     | '/onboarding'
     | '/settings'
     | '/user-settings'
@@ -140,6 +152,7 @@ export interface RootRouteChildren {
   BackupsRoute: typeof BackupsRoute
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
+  ModpacksRoute: typeof ModpacksRoute
   OnboardingRoute: typeof OnboardingRoute
   SettingsRoute: typeof SettingsRoute
   UserSettingsRoute: typeof UserSettingsRoute
@@ -175,6 +188,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/modpacks': {
+      id: '/modpacks'
+      path: '/modpacks'
+      fullPath: '/modpacks'
+      preLoaderRoute: typeof ModpacksRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/onboarding': {
@@ -220,6 +240,7 @@ const rootRouteChildren: RootRouteChildren = {
   BackupsRoute: BackupsRoute,
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
+  ModpacksRoute: ModpacksRoute,
   OnboardingRoute: OnboardingRoute,
   SettingsRoute: SettingsRoute,
   UserSettingsRoute: UserSettingsRoute,

@@ -49,6 +49,8 @@ type Config struct {
 	// SecureCookies is enabled for native HTTPS. MCM_TLS can also force it
 	// when HTTPOnly is used behind an HTTPS reverse proxy.
 	SecureCookies bool
+	// CurseForgeAPIKey holds the shared API key for CurseForge requests.
+	CurseForgeAPIKey string
 }
 
 // WebAuthnConfig configures the WebAuthn (passkey) relying party.
@@ -109,6 +111,7 @@ const (
 	EnvS3SecretKey      = "MCM_S3_SECRET_KEY"
 	EnvS3Bucket         = "MCM_S3_BUCKET"
 	EnvS3Region         = "MCM_S3_REGION"
+	EnvCurseForgeAPIKey = "CURSEFORGE_API_KEY"
 )
 
 const (
@@ -153,6 +156,7 @@ func Load() (*Config, error) {
 			Bucket:    getenv(EnvS3Bucket, ""),
 			Region:    getenv(EnvS3Region, "us-east-1"),
 		},
+		CurseForgeAPIKey: getenv(EnvCurseForgeAPIKey, ""),
 	}
 	if (cfg.TLSCert == "") != (cfg.TLSKey == "") {
 		return nil, fmt.Errorf("%s and %s must both be provided", EnvTLSCert, EnvTLSKey)

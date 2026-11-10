@@ -1,10 +1,15 @@
 import { rememberArtifactHashes } from './artifact-hashes';
 import { request } from './client';
+import { ensureCsrf } from './csrf';
 import { clearRateLimitCache } from './rate-limited-fetch';
 import type {
+  CurseForgeCategory,
+  CurseForgeDeployProgress,
   CurseForgeFile,
   CurseForgeMod,
   CurseForgeSearchResult,
+  InstallCurseForgeServerInput,
+  InstallCurseForgeServerResponse,
   Mod,
   ServerType,
 } from './types';
@@ -325,3 +330,199 @@ export async function getCurseForgeMods(
     return [];
   }
 }
+
+export interface ModpackSearchParams {
+  searchFilter?: string;
+  gameVersion?: string;
+  modLoaderType?: number;
+  sortField?: number;
+  sortOrder?: 'asc' | 'desc';
+  pageSize?: number;
+  index?: number;
+  categoryId?: number;
+}
+
+/**
+ * Searches CurseForge modpacks via MCM's backend proxy.
+ */
+export async function searchCurseForgeModpacks(
+  params: ModpackSearchParams,
+  signal?: AbortSignal,
+): Promise<CurseForgeSearchResult> {
+  const searchParams = new URLSearchParams();
+  if (params.searchFilter?.trim()) {
+    searchParams.set('searchFilter', params.searchFilter.trim());
+  }
+  if (params.gameVersion?.trim()) {
+    searchParams.set('gameVersion', params.gameVersion.trim());
+  }
+  if (params.modLoaderType !== undefined && params.modLoaderType > 0) {
+    searchParams.set('modLoaderType', String(params.modLoaderType));
+  }
+  if (params.categoryId !== undefined && params.categoryId > 0) {
+    searchParams.set('categoryId', String(params.categoryId));
+  }
+  searchParams.set('sortField', String(params.sortField ?? 2));
+  if (params.sortOrder) {
+    searchParams.set('sortOrder', params.sortOrder);
+  }
+  searchParams.set('pageSize', String(params.pageSize ?? 20));
+  searchParams.set('index', String(params.index ?? 0));
+
+  const url = `/api/v1/curseforge/modpacks?${searchParams.toString()}`;
+  return rateLimitedFetchJson<CurseForgeSearchResult>(
+    url,
+    { headers: { Accept: 'application/json' } },
+    { cacheTtlMs: 60000, signal },
+  );
+}
+
+/**
+ * Retrieves release files for a modpack, specifically highlighting if a serverPackFileId exists.
+ */
+export async function getCurseForgeModpackFiles(
+  modId: number,
+  options?: {
+    gameVersion?: string;
+    modLoaderType?: number;
+    pageSize?: number;
+    index?: number;
+  },
+  signal?: AbortSignal,
+): Promise<{ data: CurseForgeFile[]; pagination: { index: number; pageSize: number; totalCount: number } }> {
+  const searchParams = new URLSearchParams();
+  if (options?.gameVersion) {
+    searchParams.set('gameVersion', options.gameVersion);
+  }
+  if (options?.modLoaderType !== undefined && options.modLoaderType > 0) {
+    searchParams.set('modLoaderType', String(options.modLoaderType));
+  }
+  searchParams.set('pageSize', String(options?.pageSize ?? 25));
+  if (options?.index) {
+    searchParams.set('index', String(options.index));
+  }
+
+  const query = searchParams.toString();
+  const url = `/api/v1/curseforge/modpacks/${modId}/files${query ? `?${query}` : ''}`;
+  return rateLimitedFetchJson<{ data: CurseForgeFile[]; pagination: { index: number; pageSize: number; totalCount: number } }>(
+    url,
+    { headers: { Accept: 'application/json' } },
+    { cacheTtlMs: 60000, signal },
+  );
+}
+
+/**
+ * Retrieves available categories for Minecraft modpacks.
+ */
+export async function getCurseForgeCategories(
+  signal?: AbortSignal,
+): Promise<CurseForgeCategory[]> {
+  try {
+    const res = await rateLimitedFetchJson<{ data: CurseForgeCategory[] }>(
+      '/api/v1/curseforge/categories',
+      { headers: { Accept: 'application/json' } },
+      { cacheTtlMs: 600000, signal },
+    );
+    return res.data ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Deploys a CurseForge server pack container, supporting streaming progress updates.
+ */
+export async function installCurseForgeServer(
+  input: InstallCurseForgeServerInput,
+  onProgress?: (progress: CurseForgeDeployProgress) => void,
+  signal?: AbortSignal,
+): Promise<InstallCurseForgeServerResponse> {
+  const url = '/api/v1/curseforge/install-server';
+
+  if (onProgress && typeof window !== 'undefined' && window.fetch) {
+    try {
+      const csrf = await ensureCsrf();
+      const res = await fetch(`${url}?stream=true`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+          'X-MCM-CSRF': csrf,
+        },
+        body: JSON.stringify(input),
+        signal,
+      });
+
+      if (!res.ok) {
+        let errMessage = 'Failed to deploy server';
+        try {
+          const errData = await res.json();
+          errMessage = errData.error || errData.message || errData.detail || errMessage;
+        } catch {
+          errMessage = (await res.text()) || errMessage;
+        }
+        throw new Error(errMessage);
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) {
+        throw new Error('Response body unavailable');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let resultServer: InstallCurseForgeServerResponse | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        let currentEvent = 'message';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('event:')) {
+            currentEvent = trimmed.slice(6).trim();
+          } else if (trimmed.startsWith('data:')) {
+            const dataStr = trimmed.slice(5).trim();
+            try {
+              const parsed = JSON.parse(dataStr);
+              if (currentEvent === 'progress') {
+                onProgress(parsed as CurseForgeDeployProgress);
+              } else if (currentEvent === 'completed') {
+                resultServer = parsed as InstallCurseForgeServerResponse;
+              } else if (currentEvent === 'error') {
+                throw new Error(parsed.error || 'Deployment failed');
+              }
+            } catch (err) {
+              if (currentEvent === 'error') throw err;
+            }
+          }
+        }
+      }
+
+      if (resultServer) {
+        return resultServer;
+      }
+    } catch (streamErr) {
+      // If user aborted, rethrow
+      if (signal?.aborted) throw streamErr;
+      // If error came from stream, rethrow
+      if (streamErr instanceof Error && !streamErr.message.includes('fetch')) {
+        throw streamErr;
+      }
+      // Otherwise fall through to standard POST
+    }
+  }
+
+  return request<InstallCurseForgeServerResponse>(url, {
+    method: 'POST',
+    body: JSON.stringify(input),
+    signal,
+  });
+}
+

@@ -868,6 +868,8 @@ export interface CurseForgeFile {
   downloadUrl: string | null;
   gameVersions: string[];
   dependencies?: CurseForgeFileDependency[];
+  serverPackFileId?: number;
+  hasServerPack?: boolean;
 }
 
 export interface CurseForgeModAuthor {
@@ -918,6 +920,29 @@ export interface CurseForgeMod {
   dateCreated: string;
   dateReleased: string;
   latestFiles: CurseForgeFile[];
+  latestVersionTag?: string;
+}
+
+export interface InstallCurseForgeServerInput {
+  modId: number;
+  fileId: number;
+  serverName: string;
+  memoryLimit: string;
+  port: number;
+}
+
+export interface InstallCurseForgeServerResponse {
+  server: Server;
+  id: string;
+  name: string;
+  status: string;
+}
+
+export interface CurseForgeDeployProgress {
+  stage: string;
+  title: string;
+  message: string;
+  percent: number;
 }
 
 export interface CurseForgeSearchResult {

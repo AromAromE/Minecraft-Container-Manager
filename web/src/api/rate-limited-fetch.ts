@@ -263,7 +263,7 @@ export async function rateLimitedFetchJson<T>(
       }
 
       if (!resp.ok) {
-        if (effectiveUrl.startsWith('/api/curseforge/')) {
+        if (effectiveUrl.includes('/curseforge/')) {
           const body = await resp.json().catch(() => null);
           const message = body?.error?.message;
           if (typeof message === 'string') throw new Error(message);

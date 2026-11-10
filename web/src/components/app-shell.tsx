@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link, useRouterState } from '@tanstack/react-router';
-import { Archive, Box, ChevronRight, LogOut, Menu, Server, Settings2, Users, X } from 'lucide-react';
+import { Archive, Box, ChevronRight, LogOut, Menu, Package, Server, Settings2, Users, X } from 'lucide-react';
 import { useAuth, usePermissions } from '../lib/auth';
 import { ThemeToggle } from './theme-toggle';
 import { Button } from './ui/button';
@@ -8,6 +8,7 @@ import { PanelBuildNotice } from './panel-build-notice';
 
 const destinations = [
   { to: '/dashboard', label: 'Servers', icon: Server, permission: 'servers.view' },
+  { to: '/modpacks', label: 'Modpack Store', icon: Package, permission: 'servers.view' },
   { to: '/backups', label: 'Backups', icon: Archive, permission: 'backups.read' },
   { to: '/settings', label: 'App Settings', icon: Settings2, permission: 'settings.manage' },
   { to: '/users', label: 'Users', icon: Users, permission: 'users.manage' },

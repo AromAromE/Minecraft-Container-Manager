@@ -39,6 +39,18 @@ func APIKey(ctx context.Context, db *sql.DB) (string, error) {
 	return key, err
 }
 
+// APIKeyWithFallback returns the API key from database or environment, falling back to the given string.
+func APIKeyWithFallback(ctx context.Context, db *sql.DB, fallback string) (string, error) {
+	key, err := APIKey(ctx, db)
+	if err == nil && key != "" {
+		return key, nil
+	}
+	if fallback = strings.TrimSpace(fallback); fallback != "" {
+		return fallback, nil
+	}
+	return key, err
+}
+
 func Status(ctx context.Context, db *sql.DB) (Settings, error) {
 	key, source, err := load(ctx, db)
 	return Settings{Configured: key != "", Source: source}, err

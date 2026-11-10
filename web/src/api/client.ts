@@ -69,6 +69,8 @@ import type {
   AvailablePortsResponse,
   PortCheckResponse,
   CopyServerInput,
+  InstallCurseForgeServerInput,
+  InstallCurseForgeServerResponse,
 } from './types';
 
 export class ApiError extends Error {
@@ -870,6 +872,12 @@ export const api = {
   uninstallModpack: (serverId: string) =>
     request<{ ok: boolean }>(`/api/servers/${serverId}/modpack`, {
       method: 'DELETE',
+    }),
+
+  installCurseForgeServer: (input: InstallCurseForgeServerInput) =>
+    request<InstallCurseForgeServerResponse>('/api/v1/curseforge/install-server', {
+      method: 'POST',
+      body: JSON.stringify(input),
     }),
 };
 
