@@ -1,6 +1,6 @@
 import { rememberArtifactHashes } from './artifact-hashes';
 import { request } from './client';
-import { ensureCsrf } from './csrf';
+import { authenticatedFetch, ensureCsrf } from './csrf';
 import { clearRateLimitCache } from './rate-limited-fetch';
 import type {
   CurseForgeCategory,
@@ -429,6 +429,22 @@ export async function getCurseForgeCategories(
   }
 }
 
+function extractErrorMessage(errData: unknown, fallback: string): string {
+  if (!errData) return fallback;
+  if (typeof errData === 'string') return errData;
+  if (typeof errData === 'object') {
+    const obj = errData as Record<string, unknown>;
+    if (typeof obj.error === 'string') return obj.error;
+    if (obj.error && typeof obj.error === 'object') {
+      const nested = obj.error as Record<string, unknown>;
+      if (typeof nested.message === 'string') return nested.message;
+    }
+    if (typeof obj.message === 'string') return obj.message;
+    if (typeof obj.detail === 'string') return obj.detail;
+  }
+  return fallback;
+}
+
 /**
  * Deploys a CurseForge server pack container, supporting streaming progress updates.
  */
@@ -441,26 +457,24 @@ export async function installCurseForgeServer(
 
   if (onProgress && typeof window !== 'undefined' && window.fetch) {
     try {
-      const csrf = await ensureCsrf();
-      const res = await fetch(`${url}?stream=true`, {
+      const res = await authenticatedFetch(`${url}?stream=true`, {
         method: 'POST',
-        credentials: 'same-origin',
         headers: {
           'Content-Type': 'application/json',
           Accept: 'text/event-stream',
-          'X-MCM-CSRF': csrf,
         },
         body: JSON.stringify(input),
         signal,
       });
 
       if (!res.ok) {
-        let errMessage = 'Failed to deploy server';
+        let errMessage = `Failed to deploy server (${res.status})`;
         try {
           const errData = await res.json();
-          errMessage = errData.error || errData.message || errData.detail || errMessage;
+          errMessage = extractErrorMessage(errData, errMessage);
         } catch {
-          errMessage = (await res.text()) || errMessage;
+          const text = await res.text().catch(() => '');
+          if (text) errMessage = text;
         }
         throw new Error(errMessage);
       }
@@ -496,7 +510,8 @@ export async function installCurseForgeServer(
               } else if (currentEvent === 'completed') {
                 resultServer = parsed as InstallCurseForgeServerResponse;
               } else if (currentEvent === 'error') {
-                throw new Error(parsed.error || 'Deployment failed');
+                const errMsg = extractErrorMessage(parsed, 'Deployment failed');
+                throw new Error(errMsg);
               }
             } catch (err) {
               if (currentEvent === 'error') throw err;
@@ -511,8 +526,12 @@ export async function installCurseForgeServer(
     } catch (streamErr) {
       // If user aborted, rethrow
       if (signal?.aborted) throw streamErr;
-      // If error came from stream, rethrow
-      if (streamErr instanceof Error && !streamErr.message.includes('fetch')) {
+      // If error came from explicit server error or stream error, rethrow
+      if (
+        streamErr instanceof Error &&
+        !streamErr.message.toLowerCase().includes('fetch') &&
+        !streamErr.message.toLowerCase().includes('network')
+      ) {
         throw streamErr;
       }
       // Otherwise fall through to standard POST

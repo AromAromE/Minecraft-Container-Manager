@@ -347,7 +347,11 @@ func csrfTokenValid(r *http.Request) bool {
 	if err != nil {
 		return false
 	}
-	return csrfTokenMatches(cookie.Value, r.Header.Get(csrfHeaderName))
+	token := r.Header.Get(csrfHeaderName)
+	if token == "" {
+		token = r.Header.Get("X-MCM-CSRF")
+	}
+	return csrfTokenMatches(cookie.Value, token)
 }
 
 func (s *Server) wrapJSON(h http.HandlerFunc) http.HandlerFunc {

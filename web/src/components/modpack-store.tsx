@@ -947,12 +947,22 @@ export function InstallModpackModal({ mod, onClose }: InstallModpackModalProps) 
       );
 
       setDeployedResult(result);
-    } catch (err) {
-      setDeployError(
-        err instanceof Error
-          ? err.message
-          : 'Deployment failed. Please check the logs or try another version.',
-      );
+    } catch (err: unknown) {
+      let msg = 'Deployment failed. Please check the logs or try another version.';
+      if (err instanceof Error) {
+        msg = err.message;
+      } else if (typeof err === 'string') {
+        msg = err;
+      } else if (typeof err === 'object' && err !== null) {
+        const obj = err as Record<string, unknown>;
+        if (typeof obj.message === 'string') msg = obj.message;
+        else if (typeof obj.detail === 'string') msg = obj.detail;
+        else if (typeof obj.error === 'string') msg = obj.error;
+      }
+      if (msg === '[object Object]' || !msg) {
+        msg = 'Deployment failed. Please check server logs and configuration.';
+      }
+      setDeployError(msg);
     } finally {
       setDeploying(false);
     }

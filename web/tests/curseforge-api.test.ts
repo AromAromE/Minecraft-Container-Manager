@@ -266,4 +266,28 @@ describe('CurseForge API client', () => {
     expect(res.status).toBe('deployed');
     expect(res.name).toBe('My Modpack Server');
   });
+
+  it('unpacks structured API errors into readable strings rather than [object Object]', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: async () => ({
+        error: { code: 'csrf_missing', message: 'missing or invalid CSRF token' },
+      }),
+    });
+    global.fetch = fetchMock;
+
+    await expect(
+      installCurseForgeServer(
+        {
+          modId: 55555,
+          fileId: 9991,
+          serverName: 'RAD Server',
+          memoryLimit: '8GB',
+          port: 25565,
+        },
+        vi.fn(),
+      ),
+    ).rejects.toThrow('missing or invalid CSRF token');
+  });
 });
