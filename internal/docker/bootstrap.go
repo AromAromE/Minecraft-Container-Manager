@@ -23,6 +23,13 @@ if [ "$(id -u)" = "0" ] && [ "${MCM_UID:?missing MCM_UID}" != "0" ]; then
     exit 1
   fi
 
+  # Modpack scripts and server launchers (run.sh, ServerStart.sh) require bash.
+  if ! command -v bash >/dev/null 2>&1; then
+    if command -v apk >/dev/null 2>&1; then
+      packages="$packages bash"
+    fi
+  fi
+
   # BuildTools needs git. Install it before dropping privileges; the selected
   # Spigot/Bukkit runtime image already provides the JDK.
   case "${SERVER_TYPE:-}" in

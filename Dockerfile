@@ -52,7 +52,7 @@ RUN go mod download && \
 ###############################################################################
 FROM docker.io/library/alpine:3.20 AS runtime
 
-RUN apk add --no-cache ca-certificates tzdata su-exec
+RUN apk add --no-cache ca-certificates tzdata su-exec bash
 
 COPY --from=go /out/mcm /usr/local/bin/mcm
 COPY docker/entrypoint.sh /entrypoint.sh
