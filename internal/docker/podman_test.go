@@ -169,7 +169,7 @@ func TestPodmanRuntimeImages(t *testing.T) {
 	}{
 		{21, "paper", "docker.io/library/eclipse-temurin:21-jre-alpine"},
 		{17, "spigot", "docker.io/library/eclipse-temurin:17-jdk-alpine"},
-		{8, "bukkit", "docker.io/library/eclipse-temurin:8-jdk-alpine"},
+		{8, "bukkit", "docker.io/library/eclipse-temurin:8-jdk-jammy"},
 		{0, "paper", "quay.io/example/java:custom"},
 	} {
 		if got := m.RuntimeImage(tc.version, tc.kind); got != tc.want {

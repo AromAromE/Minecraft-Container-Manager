@@ -23,13 +23,16 @@ if [ "$(id -u)" = "0" ] && [ "${MCM_UID:?missing MCM_UID}" != "0" ]; then
     exit 1
   fi
 
-  # Modpack scripts and server launchers (run.sh, ServerStart.sh) require bash and GNU wget.
+  # Modpack scripts and server launchers (run.sh, ServerStart.sh) require bash, GNU wget, and certificates.
   if command -v apk >/dev/null 2>&1; then
     if ! command -v bash >/dev/null 2>&1; then
       packages="$packages bash"
     fi
     if ! wget --version >/dev/null 2>&1; then
       packages="$packages wget"
+    fi
+    if ! command -v update-ca-certificates >/dev/null 2>&1; then
+      packages="$packages ca-certificates"
     fi
   fi
 
@@ -46,6 +49,9 @@ if [ "$(id -u)" = "0" ] && [ "${MCM_UID:?missing MCM_UID}" != "0" ]; then
   if [ -n "$packages" ]; then
     if command -v apk >/dev/null 2>&1; then
       apk add --no-cache $packages
+      if command -v update-ca-certificates >/dev/null 2>&1; then
+        update-ca-certificates >/dev/null 2>&1 || true
+      fi
     elif command -v apt-get >/dev/null 2>&1; then
       apt-get update
       apt-get install -y --no-install-recommends $packages

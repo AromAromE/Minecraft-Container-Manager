@@ -454,7 +454,7 @@ func setupStartupScripts(dataDir string) {
 		}
 	}
 
-	// Normalize all .sh files in root directory
+	// 4. Normalize all .sh files in root directory
 	entries, err := os.ReadDir(dataDir)
 	if err == nil {
 		for _, e := range entries {
@@ -465,6 +465,29 @@ func setupStartupScripts(dataDir string) {
 			}
 		}
 	}
+
+	// 5. Bypass ServerStarterJar (SSJ) in ServerPackCreator modpacks.
+	// Setting USE_SSJ="false" ensures the server starts directly using official Forge scripts
+	// instead of the buggy fake server.jar wrapper.
+	configureServerPackVariables(dataDir)
+}
+
+func configureServerPackVariables(dataDir string) {
+	varPath := filepath.Join(dataDir, "variables.txt")
+	data, err := os.ReadFile(varPath)
+	if err != nil {
+		return
+	}
+	content := string(data)
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+
+	re := regexp.MustCompile(`(?m)^(\s*USE_SSJ\s*=\s*).*$`)
+	if re.MatchString(content) {
+		content = re.ReplaceAllString(content, `USE_SSJ="false"`)
+	} else {
+		content += "\nUSE_SSJ=\"false\"\n"
+	}
+	_ = os.WriteFile(varPath, []byte(content), 0644)
 }
 
 func normalizeScriptFile(filePath string) {

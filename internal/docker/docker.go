@@ -207,6 +207,19 @@ if [ "$SERVER_TYPE" = "sponge" ] && [ ! -d "/data/libraries" ]; then
   echo "installing" > /data/.mcm_state
 fi
 
+if [ -f "/data/variables.txt" ]; then
+  sed -i 's/\r$//' /data/variables.txt 2>/dev/null || true
+  if grep -q "USE_SSJ" /data/variables.txt 2>/dev/null; then
+    sed -i 's/USE_SSJ=.*/USE_SSJ="false"/' /data/variables.txt 2>/dev/null || true
+  else
+    printf '\nUSE_SSJ="false"\n' >> /data/variables.txt
+  fi
+fi
+
+for s in /data/*.sh; do
+  [ -f "$s" ] && chmod +x "$s" 2>/dev/null || true
+done
+
 if [ -f "/data/run.sh" ]; then
   if [ -f "/data/user_jvm_args.txt" ]; then
     # Heap size is owned by the panel; refresh it on every launch.
@@ -443,6 +456,12 @@ func (m *Manager) RuntimeImage(javaVersion int, serverType string) string {
 	if ver <= 0 {
 		ver = 21
 	}
+	if ver == 8 {
+		// Legacy Java 8 Minecraft versions (1.12.2 and older like Forge/RAD) fail SSL handshakes
+		// with Mojang and Forge Maven on musl-based Alpine due to outdated TLS cipher negotiation.
+		// Use Ubuntu-based eclipse-temurin:8-jdk-jammy to provide glibc, full CA certs, and JDK tools.
+		return m.imageReference("eclipse-temurin:8-jdk-jammy")
+	}
 	if requiresJDK(serverType) {
 		return m.imageReference(fmt.Sprintf("eclipse-temurin:%d-jdk-alpine", ver))
 	}
@@ -488,6 +507,9 @@ func (m *Manager) Create(ctx context.Context, opts CreateOpts) (string, error) {
 			"kettinglauncher_accepteula=true",
 			"kettinglauncher_noui=true",
 		)
+	}
+	if opts.JavaVersion == 8 {
+		env = append(env, "JAVA_TOOL_OPTIONS=-Dhttps.protocols=TLSv1.2 -Djsse.enableSNIExtension=true")
 	}
 
 	cfg := &container.Config{

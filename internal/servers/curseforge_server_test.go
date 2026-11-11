@@ -28,6 +28,7 @@ func createTestServerPackZip(t *testing.T) []byte {
 		"Server-Files-1.0/run.sh":            "#!/bin/sh\r\njava -jar server.jar nogui\r\n",
 		"Server-Files-1.0/mods/testmod.jar":  "dummy mod jar content",
 		"Server-Files-1.0/config/common.txt": "foo=bar",
+		"Server-Files-1.0/variables.txt":     "JAVA_ARGS=\"-Xmx4G\"\r\nUSE_SSJ=\"true\"\r\n",
 	}
 
 	for name, content := range files {
@@ -159,6 +160,11 @@ func TestInstallCurseForgeServer(t *testing.T) {
 	runShBytes, err := os.ReadFile(filepath.Join(serverDataDir, "run.sh"))
 	if err != nil || strings.Contains(string(runShBytes), "\r\n") {
 		t.Errorf("run.sh missing or contains CRLF: %v", err)
+	}
+
+	varBytes, err := os.ReadFile(filepath.Join(serverDataDir, "variables.txt"))
+	if err != nil || !strings.Contains(string(varBytes), `USE_SSJ="false"`) {
+		t.Errorf("variables.txt missing or USE_SSJ not set to false: %v, content=%s", err, string(varBytes))
 	}
 }
 
