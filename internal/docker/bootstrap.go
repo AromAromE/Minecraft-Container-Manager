@@ -23,10 +23,13 @@ if [ "$(id -u)" = "0" ] && [ "${MCM_UID:?missing MCM_UID}" != "0" ]; then
     exit 1
   fi
 
-  # Modpack scripts and server launchers (run.sh, ServerStart.sh) require bash.
-  if ! command -v bash >/dev/null 2>&1; then
-    if command -v apk >/dev/null 2>&1; then
+  # Modpack scripts and server launchers (run.sh, ServerStart.sh) require bash and GNU wget.
+  if command -v apk >/dev/null 2>&1; then
+    if ! command -v bash >/dev/null 2>&1; then
       packages="$packages bash"
+    fi
+    if ! wget --version >/dev/null 2>&1; then
+      packages="$packages wget"
     fi
   fi
 

@@ -24,12 +24,12 @@ func TestServerBootstrap(t *testing.T) {
 			want: "chown -R 1001:1002 /data\nsu-exec 1001:1002\nserver uid=1001 home=/data\n",
 		},
 		{
-			name: "install Alpine switcher and bash", currentUID: "0", targetUID: "1001", manager: "apk",
-			want: "apk add --no-cache su-exec bash\nchown -R 1001:1002 /data\nsu-exec 1001:1002\nserver uid=1001 home=/data\n",
+			name: "install Alpine switcher, bash, and wget", currentUID: "0", targetUID: "1001", manager: "apk",
+			want: "apk add --no-cache su-exec bash wget\nchown -R 1001:1002 /data\nsu-exec 1001:1002\nserver uid=1001 home=/data\n",
 		},
 		{
-			name: "install Alpine switcher, bash, and BuildTools git", currentUID: "0", targetUID: "1001", manager: "apk", serverType: "spigot",
-			want: "apk add --no-cache su-exec bash git\nchown -R 1001:1002 /data\nsu-exec 1001:1002\nserver uid=1001 home=/data\n",
+			name: "install Alpine switcher, bash, wget, and BuildTools git", currentUID: "0", targetUID: "1001", manager: "apk", serverType: "spigot",
+			want: "apk add --no-cache su-exec bash wget git\nchown -R 1001:1002 /data\nsu-exec 1001:1002\nserver uid=1001 home=/data\n",
 		},
 		{
 			name: "install Debian switcher", currentUID: "0", targetUID: "1001", manager: "apt-get",
